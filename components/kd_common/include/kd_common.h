@@ -30,6 +30,7 @@ typedef enum ProvisioningTaskNotification_t {
 typedef enum ProvisioningPOPTokenFormat_t {
     ALPHA_8 = 0,
     NUMERIC_6 = 1,
+    NONE = 2,
 } ProvisioningPOPTokenFormat_t;
 
 void kd_common_init();

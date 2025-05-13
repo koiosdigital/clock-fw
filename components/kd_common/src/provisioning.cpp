@@ -66,6 +66,10 @@ char* kd_common_provisioning_get_pop_token() {
         return provisioning_pop_token;
     }
 
+    if (provisioning_pop_token_format == ProvisioningPOPTokenFormat_t::NONE) {
+        return nullptr;
+    }
+
     return nullptr;
 }
 
@@ -100,7 +104,12 @@ void provisioning_task(void* pvParameter) {
                 }
                 wifi_prov_mgr_init({ .scheme = wifi_prov_scheme_ble, .scheme_event_handler = WIFI_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM });
                 wifi_prov_mgr_endpoint_create(BLE_CONSOLE_ENDPOINT_NAME);
-                wifi_prov_mgr_start_provisioning(WIFI_PROV_SECURITY_1, kd_common_provisioning_get_pop_token(), kd_common_get_device_name(), NULL);
+                if (kd_common_provisioning_get_pop_token() == nullptr) {
+                    wifi_prov_mgr_start_provisioning(WIFI_PROV_SECURITY_0, NULL, kd_common_get_device_name(), NULL);
+                }
+                else {
+                    wifi_prov_mgr_start_provisioning(WIFI_PROV_SECURITY_1, kd_common_provisioning_get_pop_token(), kd_common_get_device_name(), NULL);
+                }
                 wifi_prov_mgr_endpoint_register(BLE_CONSOLE_ENDPOINT_NAME, ble_console_endpoint, NULL);
                 provisioning_started = true;
                 ESP_LOGI(TAG, "started");

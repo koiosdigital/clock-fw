@@ -2,6 +2,8 @@
 
 #include <esp_err.h>
 
+#ifndef KD_COMMON_CRYPTO_DISABLE
+
 #define NVS_CRYPTO_NAMESPACE "secure_crypto"
 
 #define NVS_CRYPTO_DEVICE_CERT "dev_cert"
@@ -23,3 +25,5 @@ esp_err_t crypto_set_device_cert(char* buffer, size_t len);
 esp_err_t crypto_set_claim_token(char* buffer, size_t len);
 char* crypto_get_ds_params_json();
 esp_err_t crypto_store_ds_params_json(char* params);
+
+#endif

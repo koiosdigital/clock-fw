@@ -23,7 +23,10 @@ void kd_common_init() {
 
     console_init();
 
+#ifndef KD_COMMON_CRYPTO_DISABLE
     crypto_init();
+#endif
+
     provisioning_init();
     wifi_init();
 
