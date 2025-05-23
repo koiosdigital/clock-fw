@@ -4,29 +4,25 @@
 #include "freertos/task.h"
 
 #include "esp_log.h"
-#include "sdkconfig.h"
 #include "esp_event.h"
 
 #include "kd_common.h"
-
-#include "display.h"
-#include "sockets.h"
-#include "sprites.h"
-#include "scheduler.h"
+#include "uart.h"
+#include "gps.h"
+#include "modbus.h"
 
 extern "C" void app_main(void)
 {
     //event loop
     esp_event_loop_create_default();
 
-    sprites_init();
-    display_init();
-
+    //use protocomm security version 0, crypto is disabled in cmakelists
     kd_common_set_provisioning_pop_token_format(ProvisioningPOPTokenFormat_t::NONE);
     kd_common_init();
 
-    scheduler_init();
-    sockets_init();
+    uart_init();
+    gps_init();
+    modbus_init();
 
     vTaskSuspend(NULL);
 }

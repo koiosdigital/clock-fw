@@ -1,10 +1,8 @@
-menu "Clock configuration"
-    config CLOCK_TYPE
-        int "Clock type"
+menu "HW type"
+    config HW_TYPE
+        int "HW_TYPE"
         default 1
         help
-            The type of hardware being used.
-            1 = Word Clock
-            2 = Nixie Clock
-            3 = Fibonacci Clock
+            1 = Mothership
+            2 = Rover
 endmenu

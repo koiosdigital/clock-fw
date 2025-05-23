@@ -202,6 +202,25 @@ static void register_log_level(void)
     nvs_close(handle);
 }
 
+static int wifi_reset(int argc, char** argv)
+{
+    kd_common_clear_wifi_credentials();
+    return 0;
+}
+
+static void register_wifi_reset(void)
+{
+    const esp_console_cmd_t cmd = {
+        .command = "wifi_reset",
+        .help = "Reset the wifi credentials",
+        .hint = NULL,
+        .func = &wifi_reset,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
+}
+
+//MARK: Crypto commands
+#ifndef KD_COMMON_CRYPTO_DISABLE
 static int crypto_status(int argc, char** argv)
 {
     console_out("{\"status\":%i,\"error\":false}\n", kd_common_crypto_get_state());
@@ -398,24 +417,7 @@ static void register_set_claim_token(void)
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
 }
-
-
-static int wifi_reset(int argc, char** argv)
-{
-    kd_common_clear_wifi_credentials();
-    return 0;
-}
-
-static void register_wifi_reset(void)
-{
-    const esp_console_cmd_t cmd = {
-        .command = "wifi_reset",
-        .help = "Reset the wifi credentials",
-        .hint = NULL,
-        .func = &wifi_reset,
-    };
-    ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
-}
+#endif
 
 char* kd_common_run_command(char* input, int* return_code) {
     use_printf = false;
@@ -448,13 +450,16 @@ void console_init() {
     register_heap();
     register_log_level();
     register_tasks();
+    register_wifi_reset();
+
+#ifndef KD_COMMON_CRYPTO_DISABLE
     register_crypto_status();
     register_get_csr();
     register_set_device_cert();
     register_get_ds_params();
     register_set_ds_params();
     register_set_claim_token();
-    register_wifi_reset();
+#endif
 
     esp_console_dev_usb_serial_jtag_config_t hw_config = ESP_CONSOLE_DEV_USB_SERIAL_JTAG_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_console_new_repl_usb_serial_jtag(&hw_config, &repl_config, &repl));
