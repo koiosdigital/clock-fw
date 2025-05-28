@@ -17,4 +17,4 @@ ENDIF()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
-project(clock-fw)
+project(levimcu-fw)
