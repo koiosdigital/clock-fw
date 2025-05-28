@@ -176,7 +176,9 @@ void provisioning_event_handler(void* arg, esp_event_base_t event_base, int32_t 
             break;
         }
         case WIFI_PROV_START: {
-            ESP_LOGI(TAG, "provision::%s::%s", kd_common_get_device_name(), kd_common_provisioning_get_pop_token());
+            if (kd_common_provisioning_get_pop_token() != nullptr) {
+                ESP_LOGI(TAG, "provision::%s::%s", kd_common_get_device_name(), kd_common_provisioning_get_pop_token());
+            }
             break;
         }
         default:
