@@ -13,11 +13,11 @@
 
 static const char* TAG = "internet_time";
 
-char http_response_data[512] = { 0 };
+char itime_response_data[512] = { 0 };
 esp_err_t _http_event_handler(esp_http_client_event_t* evt) {
     if (evt->event_id == HTTP_EVENT_ON_DATA) {
-        memcpy(http_response_data, evt->data, evt->data_len);
-        http_response_data[evt->data_len] = '\0';
+        memcpy(itime_response_data, evt->data, evt->data_len);
+        itime_response_data[evt->data_len] = '\0';
     }
     return ESP_OK;
 }
@@ -43,11 +43,11 @@ void setup_time_task(void* pvParameter) {
     esp_http_client_handle_t http_client = esp_http_client_init(&config);
     esp_http_client_perform(http_client);
 
-    ESP_LOGI(TAG, "response: %s", http_response_data);
+    ESP_LOGI(TAG, "response: %s", itime_response_data);
     esp_http_client_cleanup(http_client);
 
-    cJSON* root = cJSON_Parse(http_response_data);
-    memset(http_response_data, 0, sizeof(http_response_data));
+    cJSON* root = cJSON_Parse(itime_response_data);
+    memset(itime_response_data, 0, sizeof(itime_response_data));
 
     const char* tzname = cJSON_GetObjectItem(root, "tzname")->valuestring;
     ESP_LOGI(TAG, "timezone: %s", tzname);

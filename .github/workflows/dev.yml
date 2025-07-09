@@ -60,8 +60,7 @@ jobs:
           extra_docker_args: -v ./output:/output
           target: ${{ env.IDF_TARGET }}
           command: |
-            apt update -y
-            apt install -y protobuf-compiler protobuf-c-compiler
+            export BUILD_VARIANT=${{ matrix.config }}
 
             #build
             idf.py build | tee build.log
