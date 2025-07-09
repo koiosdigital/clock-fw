@@ -327,5 +327,5 @@ void clock_init() {
         return;
     }
 
-    xTaskCreate(clock_task, "Clock Task", 2048, NULL, 5, NULL);
+    xTaskCreate(clock_task, "Clock Task", 4096, NULL, 5, NULL);
 }
