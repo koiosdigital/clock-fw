@@ -14,7 +14,7 @@
 static const char* TAG = "internet_time";
 
 char itime_response_data[512] = { 0 };
-esp_err_t _http_event_handler(esp_http_client_event_t* evt) {
+esp_err_t itime_http_event_handler(esp_http_client_event_t* evt) {
     if (evt->event_id == HTTP_EVENT_ON_DATA) {
         memcpy(itime_response_data, evt->data, evt->data_len);
         itime_response_data[evt->data_len] = '\0';
@@ -36,7 +36,7 @@ void setup_time_task(void* pvParameter) {
 
     esp_http_client_config_t config = {
         .url = TIME_INFO_URL,
-        .event_handler = _http_event_handler,
+        .event_handler = itime_http_event_handler,
         .crt_bundle_attach = esp_crt_bundle_attach,
     };
 
