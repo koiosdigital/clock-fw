@@ -200,7 +200,7 @@ end:
 
     // Update the pixel buffer based on the bits
     for (int i = 0; i < NUM_PIXELS; i++) {
-        uint8_t value = bits[i] && on ? 255 : 0;
+        uint8_t value = bits[i] && on ? 0 : 255;
         pixel_buffer[i * 3 + 0] = value; // R
         pixel_buffer[i * 3 + 1] = value; // G
         pixel_buffer[i * 3 + 2] = value; // B
