@@ -1,0 +1,4 @@
+#
+# Clock configuration
+#
+CONFIG_CLOCK_TYPE=2
