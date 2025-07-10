@@ -6,7 +6,7 @@ list(FILTER NESTED_SRC EXCLUDE REGEX ".*/clock.cpp$")
 
 #if build variant is "devel", set to "fibonacci"
 if (BUILD_VARIANT STREQUAL "devel")
-    set(BUILD_VARIANT "nixie")
+    set(BUILD_VARIANT "wordclock")
 endif()
 
 list(APPEND INCLUDE_DIRS ".")

@@ -197,7 +197,7 @@ void led_task(void* pvParameter) {
 
     led_count = config->count;
     is_rgbw = config->is_rgbw;
-    size_t bufSize = config->is_rgbw ? led_count * 4 : led_count * 3;
+    size_t bufSize = is_rgbw ? led_count * 4 : led_count * 3;
     led_buffer = (uint8_t*)malloc(bufSize);
 
     rmt_channel_handle_t led_chan = NULL;

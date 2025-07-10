@@ -18,7 +18,7 @@ const char* letters =
 "OSIXTWELVETFOURAFIVESEVENMEIGHTENINETENTTHREECELEVENINOTHENAFTERNOONMORNINGSATENIGHTEVENINGCANDTCOLDCOOLETWARMURAHOT";
 
 
-LEDConfig_t fibonacci_led_config = {
+LEDConfig_t wordclock_led_config = {
     .pin = (gpio_num_t)4,  // Example GPIO pin
     .count = NUM_PIXELS,
     .is_rgbw = false,   // Assuming RGB, not RGBW
@@ -232,7 +232,7 @@ void clock_task(void* pvParameters) {
 }
 
 void clock_init() {
-    led_init(fibonacci_led_config);
+    led_init(wordclock_led_config);
     led_set_effect(LED_RAW_BUFFER);
     pixel_buffer = led_get_buffer();
 
@@ -240,8 +240,6 @@ void clock_init() {
         ESP_LOGE("Clock", "Failed to get pixel buffer");
         return;
     }
-
-    ESP_LOGI("Clock", "Clock cinitialized with %d pixels", fibonacci_led_config.count);
 
     xTaskCreate(clock_task, "Clock Task", 8192, NULL, 5, NULL);
 }
