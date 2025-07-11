@@ -13,10 +13,12 @@
 #include "driver/ledc.h"
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
+#include <internet_time.h>
 
 #define NUM_PIXELS 6
 
 gpio_num_t oe_pin = (gpio_num_t)11; // Example GPIO pin for output enable
+gpio_num_t str_pin = (gpio_num_t)9; // Example GPIO pin for shift register clock
 
 LEDConfig_t nixie_led_config = {
     .pin = (gpio_num_t)21,  // Example GPIO pin
@@ -48,7 +50,7 @@ void spi_hv5222_init() {
         .address_bits = 0,         // No address phase
         .dummy_bits = 0,           // No dummy bits
         .mode = 3,
-        .clock_speed_hz = 50000, // 10 MHz
+        .clock_speed_hz = 200000, // 10 MHz
         .spics_io_num = -1,        // no hardware CS
         .queue_size = 2,
     };
@@ -58,12 +60,9 @@ void spi_hv5222_init() {
 }
 
 void update_hv_drivers(int h, int m, int s) {
-    ESP_LOGI("Clock", "updating time to %02d:%02d:%02d", h, m, s);
-    // 64-bit shift register data (active low): 4-bit blink + six 10-bit digit groups
     uint8_t bitstream[8];
     memset(bitstream, 0xFF, sizeof(bitstream));
 
-    // First 4 bits: blink indication on odd seconds (clear to 0 to activate)
     if ((s % 2) != 0) {
         for (int b = 0; b < 4; b++) {
             int bitPos = b;
@@ -72,23 +71,22 @@ void update_hv_drivers(int h, int m, int s) {
             bitstream[byteIdx] &= ~(1 << bitIdx);
         }
     }
-    // Next 6 groups of 10 bits: digits (active low, bit = 0)
+
     int groups[6] = { s % 10, s / 10, m % 10, m / 10, h % 10, h / 10 };
     int offsets[6] = { 4, 14, 24, 34, 44, 54 };
     for (int i = 0; i < 6; i++) {
         int digit = groups[i];
         int base = offsets[i];
-        int bitInGroup = 9 - digit;  // index within 10 bits
+        int bitInGroup = 9 - digit;
         int bitPos = base + bitInGroup;
         int byteIdx = bitPos / 8;
         int bitIdx = 7 - (bitPos % 8);
         bitstream[byteIdx] &= ~(1 << bitIdx);
     }
 
-    // SPI transaction: shift out 64 bits (MSB first)
     spi_transaction_t txn = {};
     txn.tx_buffer = bitstream;
-    txn.length = 64;  // bits
+    txn.length = 64;
 
     esp_err_t err = spi_device_transmit(spi_hv, &txn);
     assert(err == ESP_OK && "Failed to transmit!");
@@ -101,22 +99,51 @@ void clock_task(void* pvParameters) {
     int lastHour = -1;
     int lastMinute = -1;
     int lastSecond = -1;
+    int lastCleaningDigit = -1;
+    int cleaningIteration = 0;
+    bool cleaning = false;
+
+    led_set_color(255, 255, 0, 0);
+    led_set_effect(LED_CYCLIC);
+    led_set_brightness(255);
+    update_hv_drivers(12, 34, 56);
+
+    while (!is_time_synced()) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    led_set_effect(LED_SOLID);
+    led_set_brightness(255);
+    led_set_color(255, 0, 0, 0);
 
     while (true) {
         time(&now);
         localtime_r(&now, &timeinfo);
 
-        if (timeinfo.tm_hour != lastHour || timeinfo.tm_min != lastMinute || timeinfo.tm_sec != lastSecond) {
-            lastHour = timeinfo.tm_hour;
-            lastMinute = timeinfo.tm_min;
-            lastSecond = timeinfo.tm_sec;
+        if (!cleaning) {
+            if (timeinfo.tm_hour != lastHour || timeinfo.tm_min != lastMinute || timeinfo.tm_sec != lastSecond) {
+                lastHour = timeinfo.tm_hour;
+                lastMinute = timeinfo.tm_min;
+                lastSecond = timeinfo.tm_sec;
 
-            update_hv_drivers(lastHour, lastMinute, lastSecond);
+                update_hv_drivers(lastHour, lastMinute, lastSecond);
+            }
+
+            if (lastHour == 4 && lastMinute == 0 && lastSecond == 0) { // Start cleaning at 4:00 AM local time
+                cleaning = true;
+            }
+        }
+        else {
+            update_hv_drivers(lastCleaningDigit * 11, lastCleaningDigit * 11, lastCleaningDigit * 11);
+            lastCleaningDigit = (lastCleaningDigit + 1) % 10;
+            cleaningIteration++;
+            if (cleaningIteration >= 3000) { //Clean for about 10 minutes
+                cleaning = false;
+                cleaningIteration = 0;
+            }
         }
 
-
-        // Simulate a delay for the clock update
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
 

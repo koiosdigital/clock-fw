@@ -1,10 +1,8 @@
- #include "esp_check.h"
- #include "led_strip_encoder.h"
+#include "esp_check.h"
+#include "led_strip_encoder.h"
 
- #include "driver/rmt_encoder.h"
- 
- static const char *TAG = "led_encoder";
- 
+#include "driver/rmt_encoder.h"
+
  typedef struct {
      rmt_encoder_t base;
      rmt_encoder_t *bytes_encoder;

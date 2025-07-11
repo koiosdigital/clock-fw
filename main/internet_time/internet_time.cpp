@@ -22,6 +22,16 @@ esp_err_t itime_http_event_handler(esp_http_client_event_t* evt) {
     return ESP_OK;
 }
 
+bool is_time_synced() {
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+
+    // Check if the year is valid (not 1970)
+    return (timeinfo.tm_year > 70);
+}
+
 void setup_time_task(void* pvParameter) {
     while (true) {
         if (kd_common_is_wifi_connected() == false) {

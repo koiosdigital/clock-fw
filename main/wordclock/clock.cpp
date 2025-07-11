@@ -227,7 +227,7 @@ void clock_task(void* pvParameters) {
 
 
         // Simulate a delay for the clock update
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
 

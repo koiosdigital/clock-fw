@@ -14,8 +14,6 @@
 #include "internet_time.h"
 #include "clock.h"
 
-static const char* TAG = "main";
-
 extern "C" void app_main(void)
 {
     //event loop

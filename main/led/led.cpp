@@ -7,8 +7,6 @@
 #include "driver/rmt_tx.h"
 #include "led_strip_encoder.h"
 
-static const char* TAG = "led";
-
 LEDEffect_t current_effect = LED_OFF;
 static uint8_t led_speed = 10;
 static uint8_t led_brightness = 255;
@@ -86,9 +84,9 @@ void tx_buf_fill_color(uint8_t r, uint8_t g, uint8_t b) {
 
 void tx_buf_set_color_at(int index, uint8_t r, uint8_t g, uint8_t b) {
     if (index < 0 || index >= led_count) {
-        ESP_LOGE(TAG, "Index out of bounds");
         return;
     }
+
     if (is_rgbw) {
         led_buffer[index * 4 + 0] = g;
         led_buffer[index * 4 + 1] = r;
