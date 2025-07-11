@@ -6,7 +6,7 @@ list(FILTER NESTED_SRC EXCLUDE REGEX ".*/clock.cpp$")
 
 #if build variant is "devel", set to "fibonacci"
 if (BUILD_VARIANT STREQUAL "devel")
-    set(BUILD_VARIANT "wordclock")
+    set(BUILD_VARIANT "nixie")
 endif()
 
 list(APPEND INCLUDE_DIRS ".")
@@ -30,3 +30,4 @@ idf_build_set_property(COMPILE_OPTIONS "-Wno-error=parentheses" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-Wno-write-strings" APPEND)
 
 idf_build_set_property(COMPILE_OPTIONS "-DDEVICE_NAME_PREFIX=\"CLOCK\"" APPEND)
+idf_build_set_property(COMPILE_OPTIONS "-DKD_COMMON_CRYPTO_DISABLE" APPEND)
