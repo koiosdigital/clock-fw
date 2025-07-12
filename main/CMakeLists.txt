@@ -12,6 +12,7 @@ endif()
 list(APPEND INCLUDE_DIRS ".")
 list(APPEND INCLUDE_DIRS "internet_time")
 list(APPEND INCLUDE_DIRS "led")
+list(APPEND INCLUDE_DIRS "api")
 list(APPEND INCLUDE_DIRS "${BUILD_VARIANT}")
 
 # Explicitly include clock.cpp only from the selected BUILD_VARIANT folder
@@ -22,7 +23,7 @@ message(STATUS ${NESTED_SRC})
 idf_component_register(
     SRCS ${NESTED_SRC}
     INCLUDE_DIRS ${INCLUDE_DIRS}
-    REQUIRES lwip esp_wifi heap json bootloader_support kd_common esp_http_client wifi_provisioning esp_driver_rmt mbedtls driver
+    REQUIRES lwip esp_wifi heap json bootloader_support kd_common esp_http_client wifi_provisioning esp_driver_rmt mbedtls driver esp_http_server
 )
 
 idf_build_set_property(COMPILE_OPTIONS "-Wno-missing-field-initializers" APPEND)

@@ -13,6 +13,7 @@
 #include "cJSON.h"
 #include "internet_time.h"
 #include "clock.h"
+#include "api.h"
 
 extern "C" void app_main(void)
 {
@@ -23,6 +24,7 @@ extern "C" void app_main(void)
     kd_common_set_provisioning_pop_token_format(ProvisioningPOPTokenFormat_t::NONE);
     kd_common_init();
 
+    api_init();
     time_init();
     clock_init();
 
