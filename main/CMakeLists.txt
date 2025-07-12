@@ -1,12 +1,14 @@
 file(GLOB_RECURSE NESTED_SRC
        **.cpp
 )
-# Exclude any clock.cpp found in other directories
+
 list(FILTER NESTED_SRC EXCLUDE REGEX ".*/clock.cpp$")
+list(FILTER NESTED_SRC EXCLUDE REGEX ".*/handlers.cpp$")
 
 #if build variant is "devel", set to "fibonacci"
 if (BUILD_VARIANT STREQUAL "devel")
     set(BUILD_VARIANT "nixie")
+    add_compile_definitions(FIRMWARE_VARIANT="${BUILD_VARIANT}")
 endif()
 
 list(APPEND INCLUDE_DIRS ".")
@@ -15,8 +17,8 @@ list(APPEND INCLUDE_DIRS "led")
 list(APPEND INCLUDE_DIRS "api")
 list(APPEND INCLUDE_DIRS "${BUILD_VARIANT}")
 
-# Explicitly include clock.cpp only from the selected BUILD_VARIANT folder
 list(APPEND NESTED_SRC "${CMAKE_CURRENT_SOURCE_DIR}/${BUILD_VARIANT}/clock.cpp")
+list(APPEND NESTED_SRC "${CMAKE_CURRENT_SOURCE_DIR}/${BUILD_VARIANT}/handlers.cpp")
 
 message(STATUS ${NESTED_SRC})
 

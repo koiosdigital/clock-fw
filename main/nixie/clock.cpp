@@ -13,7 +13,11 @@
 #include "driver/ledc.h"
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
+#include "nvs_flash.h"
+#include "nvs.h"
 #include <internet_time.h>
+
+#define NIXIE_NVS_NAMESPACE "nixie_cfg"
 
 #define NUM_PIXELS 6
 
@@ -31,6 +35,14 @@ LEDConfig_t nixie_led_config = {
 #define PIN_SCLK    12
 
 spi_device_handle_t spi_hv;
+
+// Nixie configuration state
+static nixie_config_t nixie_config = {
+    .brightness = 80,        // Default 80% (maps to ~72% actual duty)
+    .military_time = false,  // Default 12-hour format
+    .blinking_dots = true,   // Default blinking enabled
+    .enabled = true          // Default enabled
+};
 
 void spi_hv5222_init() {
     spi_bus_config_t buscfg = {
@@ -60,10 +72,23 @@ void spi_hv5222_init() {
 }
 
 void update_hv_drivers(int h, int m, int s) {
+    // If nixie display is disabled, turn everything off
+    if (!nixie_config.enabled) {
+        uint8_t bitstream[8];
+        memset(bitstream, 0xFF, sizeof(bitstream)); // All high = all off (active low)
+
+        spi_transaction_t txn = {};
+        txn.tx_buffer = bitstream;
+        txn.length = 64;
+        esp_err_t err = spi_device_transmit(spi_hv, &txn);
+        assert(err == ESP_OK && "Failed to transmit!");
+        return;
+    }
+
     uint8_t bitstream[8];
     memset(bitstream, 0xFF, sizeof(bitstream));
 
-    if ((s % 2) != 0) {
+    if ((s % 2) != 0 && nixie_config.blinking_dots) {
         for (int b = 0; b < 4; b++) {
             int bitPos = b;
             int byteIdx = bitPos / 8;
@@ -103,7 +128,9 @@ void clock_task(void* pvParameters) {
     int cleaningIteration = 0;
     bool cleaning = false;
 
-    led_set_color(255, 255, 0, 0);
+    // Set temporary status indication during time sync
+    led_persistent_config_t saved_config = led_get_persistent_config();
+    led_set_color(255, 255, 0, 0);  // Yellow during sync
     led_set_effect(LED_CYCLIC);
     led_set_brightness(255);
     update_hv_drivers(12, 34, 56);
@@ -112,9 +139,8 @@ void clock_task(void* pvParameters) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    led_set_effect(LED_SOLID);
-    led_set_brightness(255);
-    led_set_color(255, 0, 0, 0);
+    // Restore saved LED configuration after sync
+    led_set_persistent_config(&saved_config);
 
     while (true) {
         time(&now);
@@ -126,7 +152,16 @@ void clock_task(void* pvParameters) {
                 lastMinute = timeinfo.tm_min;
                 lastSecond = timeinfo.tm_sec;
 
-                update_hv_drivers(lastHour, lastMinute, lastSecond);
+                int hour = lastHour;
+
+                if (!nixie_config.military_time) {
+                    if (hour >= 12) {
+                        hour -= 12;
+                        if (hour == 0) hour = 12; // Handle midnight case
+                    }
+                }
+
+                update_hv_drivers(hour, lastMinute, lastSecond);
             }
 
             if (lastHour == 4 && lastMinute == 0 && lastSecond == 0) { // Start cleaning at 4:00 AM local time
@@ -148,7 +183,7 @@ void clock_task(void* pvParameters) {
 }
 
 void oe_pwm_init() {
-    // Configure PWM via LEDC for output enable pin at 80% duty cycle
+    // Configure PWM via LEDC for output enable pin
     ledc_timer_config_t pwm_timer = {
         .speed_mode = LEDC_LOW_SPEED_MODE,
         .duty_resolution = LEDC_TIMER_8_BIT,
@@ -164,17 +199,127 @@ void oe_pwm_init() {
         .channel = LEDC_CHANNEL_0,
         .intr_type = LEDC_INTR_DISABLE,
         .timer_sel = LEDC_TIMER_0,
-        .duty = (uint32_t)(0.5 * ((1 << 8) - 1)), // 80% duty
+        .duty = 0, // Will be set by nixie_set_brightness
         .hpoint = 0
     };
     ledc_channel_config(&pwm_channel);
+
+    // Set initial brightness
+    nixie_set_brightness(nixie_config.brightness);
+}
+
+// Nixie configuration functions
+void nixie_set_brightness(uint8_t brightness_percent) {
+    if (brightness_percent > 100) brightness_percent = 100;
+    nixie_config.brightness = brightness_percent;
+
+    // Map 0-100% to 20-100% duty cycle, then invert (since OE is active low)
+    float actual_duty = 20.0f + (brightness_percent * 80.0f / 100.0f);
+    float inverted_duty = 100.0f - actual_duty;
+    uint32_t duty_value = (uint32_t)(inverted_duty * ((1 << 8) - 1) / 100.0f);
+
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, duty_value);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+    nixie_save_config_to_nvs();
+}
+
+uint8_t nixie_get_brightness(void) {
+    return nixie_config.brightness;
+}
+
+void nixie_set_military_time(bool enabled) {
+    nixie_config.military_time = enabled;
+    nixie_save_config_to_nvs();
+}
+
+bool nixie_get_military_time(void) {
+    return nixie_config.military_time;
+}
+
+void nixie_set_blinking_dots(bool enabled) {
+    nixie_config.blinking_dots = enabled;
+    nixie_save_config_to_nvs();
+}
+
+bool nixie_get_blinking_dots(void) {
+    return nixie_config.blinking_dots;
+}
+
+void nixie_set_enabled(bool enabled) {
+    nixie_config.enabled = enabled;
+    nixie_save_config_to_nvs();
+}
+
+bool nixie_get_enabled(void) {
+    return nixie_config.enabled;
+}
+
+nixie_config_t nixie_get_config(void) {
+    return nixie_config;
+}
+
+void nixie_set_config(const nixie_config_t* config) {
+    if (config == NULL) return;
+
+    nixie_set_brightness(config->brightness);
+    nixie_set_military_time(config->military_time);
+    nixie_set_blinking_dots(config->blinking_dots);
+    nixie_set_enabled(config->enabled);
+}
+
+void nixie_load_config_from_nvs(void) {
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open(NIXIE_NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGI("NIXIE", "NVS namespace not found, using defaults");
+        return;
+    }
+
+    size_t required_size = sizeof(nixie_config_t);
+    err = nvs_get_blob(nvs_handle, "config", &nixie_config, &required_size);
+    if (err != ESP_OK) {
+        ESP_LOGI("NIXIE", "Config not found in NVS, using defaults");
+    }
+    else {
+        ESP_LOGI("NIXIE", "Loaded config from NVS: brightness=%d, military=%d, blink=%d, enabled=%d",
+            nixie_config.brightness, nixie_config.military_time,
+            nixie_config.blinking_dots, nixie_config.enabled);
+    }
+
+    nvs_close(nvs_handle);
+}
+
+void nixie_save_config_to_nvs(void) {
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open(NIXIE_NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE("NIXIE", "Failed to open NVS for writing: %s", esp_err_to_name(err));
+        return;
+    }
+
+    err = nvs_set_blob(nvs_handle, "config", &nixie_config, sizeof(nixie_config_t));
+    if (err != ESP_OK) {
+        ESP_LOGE("NIXIE", "Failed to save config to NVS: %s", esp_err_to_name(err));
+    }
+    else {
+        err = nvs_commit(nvs_handle);
+        if (err != ESP_OK) {
+            ESP_LOGE("NIXIE", "Failed to commit NVS: %s", esp_err_to_name(err));
+        }
+        else {
+            ESP_LOGI("NIXIE", "Config saved to NVS");
+        }
+    }
+
+    nvs_close(nvs_handle);
 }
 
 void clock_init() {
+    // Load configuration from NVS first
+    nixie_load_config_from_nvs();
+
     oe_pwm_init(); // Initialize PWM for output enable pin
     spi_hv5222_init();
-    led_init(nixie_led_config);
-    led_set_effect(LED_SOLID);
-    led_set_color(255, 0, 0, 0); // Set color to red
+    led_init(nixie_led_config); // This now loads and applies saved LED config
     xTaskCreate(clock_task, "Clock Task", 8192, NULL, 5, NULL);
 }
