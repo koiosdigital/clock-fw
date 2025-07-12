@@ -31,11 +31,11 @@ static uint16_t led_count = 0;
 static bool is_rgbw = false;
 
 uint8_t* led_buffer = nullptr;
+uint8_t* led_mask = nullptr;
 
 void led_set_effect(LEDEffect_t effect) {
     current_effect = effect;
     led_persistent_config.effect = effect;
-    led_save_config_to_nvs();
 }
 
 void led_set_color(uint8_t r, uint8_t g, uint8_t b, uint8_t w) {
@@ -47,19 +47,16 @@ void led_set_color(uint8_t r, uint8_t g, uint8_t b, uint8_t w) {
     led_persistent_config.g = g;
     led_persistent_config.b = b;
     led_persistent_config.w = w;
-    led_save_config_to_nvs();
 }
 
 void led_set_speed(uint8_t speed) {
     led_speed = speed;
     led_persistent_config.speed = speed;
-    led_save_config_to_nvs();
 }
 
 void led_set_brightness(uint8_t brightness) {
     led_brightness = brightness;
     led_persistent_config.brightness = brightness;
-    led_save_config_to_nvs();
 }
 
 LEDEffect_t led_get_effect() {
@@ -110,16 +107,21 @@ void handle_fading() {
 
 void tx_buf_fill_color(uint8_t r, uint8_t g, uint8_t b) {
     for (int i = 0; i < led_count; i++) {
+        // Apply mask - only set color if mask bit is 1
+        uint8_t masked_r = led_mask[i] ? r : 0;
+        uint8_t masked_g = led_mask[i] ? g : 0;
+        uint8_t masked_b = led_mask[i] ? b : 0;
+
         if (is_rgbw) {
-            led_buffer[i * 4 + 0] = g;
-            led_buffer[i * 4 + 1] = r;
-            led_buffer[i * 4 + 2] = b;
+            led_buffer[i * 4 + 0] = masked_g;
+            led_buffer[i * 4 + 1] = masked_r;
+            led_buffer[i * 4 + 2] = masked_b;
             led_buffer[i * 4 + 3] = 0;
         }
         else {
-            led_buffer[i * 3 + 0] = g;
-            led_buffer[i * 3 + 1] = r;
-            led_buffer[i * 3 + 2] = b;
+            led_buffer[i * 3 + 0] = masked_g;
+            led_buffer[i * 3 + 1] = masked_r;
+            led_buffer[i * 3 + 2] = masked_b;
         }
     }
 }
@@ -129,16 +131,21 @@ void tx_buf_set_color_at(int index, uint8_t r, uint8_t g, uint8_t b) {
         return;
     }
 
+    // Apply mask - only set color if mask bit is 1
+    uint8_t masked_r = led_mask[index] ? r : 0;
+    uint8_t masked_g = led_mask[index] ? g : 0;
+    uint8_t masked_b = led_mask[index] ? b : 0;
+
     if (is_rgbw) {
-        led_buffer[index * 4 + 0] = g;
-        led_buffer[index * 4 + 1] = r;
-        led_buffer[index * 4 + 2] = b;
+        led_buffer[index * 4 + 0] = masked_g;
+        led_buffer[index * 4 + 1] = masked_r;
+        led_buffer[index * 4 + 2] = masked_b;
         led_buffer[index * 4 + 3] = 0;
     }
     else {
-        led_buffer[index * 3 + 0] = g;
-        led_buffer[index * 3 + 1] = r;
-        led_buffer[index * 3 + 2] = b;
+        led_buffer[index * 3 + 0] = masked_g;
+        led_buffer[index * 3 + 1] = masked_r;
+        led_buffer[index * 3 + 2] = masked_b;
     }
 
 }
@@ -222,9 +229,6 @@ void led_loop() {
     case LED_RAINBOW:
         // Implement rainbow effect here
         break;
-    case LED_RAW_BUFFER:
-        // Implement raw buffer effect here
-        break;
     }
 }
 
@@ -239,6 +243,10 @@ void led_task(void* pvParameter) {
     is_rgbw = config->is_rgbw;
     size_t bufSize = is_rgbw ? led_count * 4 : led_count * 3;
     led_buffer = (uint8_t*)malloc(bufSize);
+
+    // Allocate and initialize mask buffer (defaults to all 1s)
+    led_mask = (uint8_t*)malloc(led_count);
+    memset(led_mask, 1, led_count);  // Default mask is all on
 
     rmt_channel_handle_t led_chan = NULL;
     rmt_tx_channel_config_t tx_chan_config = {
@@ -295,6 +303,7 @@ void led_init(LEDConfig_t led_config)
 
 // NVS configuration functions
 led_persistent_config_t led_get_persistent_config(void) {
+    led_load_config_from_nvs();
     return led_persistent_config;
 }
 
@@ -358,4 +367,23 @@ void led_save_config_to_nvs(void) {
     }
 
     nvs_close(nvs_handle);
+}
+
+// LED mask functions
+void led_set_mask(const uint8_t* mask) {
+    if (mask == nullptr || led_mask == nullptr) {
+        return;
+    }
+    memcpy(led_mask, mask, led_count);
+}
+
+void led_clear_mask() {
+    if (led_mask == nullptr) {
+        return;
+    }
+    memset(led_mask, 1, led_count);  // Reset to all on
+}
+
+const uint8_t* led_get_mask() {
+    return led_mask;
 }

@@ -10,7 +10,6 @@ typedef enum LEDEffect_t {
     LED_BREATHE,
     LED_CYCLIC,
     LED_RAINBOW,
-    LED_RAW_BUFFER, //raw buffer effect
 } LEDEffect_t;
 
 typedef struct LEDConfig_t {
@@ -35,6 +34,11 @@ void led_set_brightness(uint8_t brightness);
 void led_fade_out();
 void led_fade_in();
 void led_init(LEDConfig_t config);
+
+// LED mask functions
+void led_set_mask(const uint8_t* mask);
+void led_clear_mask();
+const uint8_t* led_get_mask();
 
 LEDEffect_t led_get_effect();
 void led_get_color(uint8_t* r, uint8_t* g, uint8_t* b, uint8_t* w);

@@ -29,7 +29,6 @@ esp_err_t led_config_get_handler(httpd_req_t* req) {
     case LED_BREATHE: effect_str = "breathe"; break;
     case LED_CYCLIC: effect_str = "cyclic"; break;
     case LED_RAINBOW: effect_str = "rainbow"; break;
-    case LED_RAW_BUFFER: effect_str = "raw_buffer"; break;
     }
 
     cJSON* mode = cJSON_CreateString(effect_str);
@@ -102,7 +101,6 @@ esp_err_t led_config_post_handler(httpd_req_t* req) {
         else if (strcmp(mode_str, "breathe") == 0) new_effect = LED_BREATHE;
         else if (strcmp(mode_str, "cyclic") == 0) new_effect = LED_CYCLIC;
         else if (strcmp(mode_str, "rainbow") == 0) new_effect = LED_RAINBOW;
-        else if (strcmp(mode_str, "raw_buffer") == 0) new_effect = LED_RAW_BUFFER;
         else {
             ESP_LOGE(TAG, "Invalid mode: %s", mode_str);
             cJSON_Delete(json);
@@ -153,6 +151,17 @@ esp_err_t led_config_post_handler(httpd_req_t* req) {
 
     ESP_LOGI(TAG, "LED config updated: mode=%d, color=(%d,%d,%d,%d), brightness=%d",
         new_effect, r, g, b, w, brightness);
+
+    led_persistent_config_t config;
+    config.effect = new_effect;
+    config.r = r;
+    config.g = g;
+    config.b = b;
+    config.w = w;
+    config.brightness = brightness;
+    config.speed = led_get_speed(); // Keep current speed
+
+    led_set_persistent_config(&config);
 
     // Return success response
     const char* response = "{\"status\":\"success\"}";

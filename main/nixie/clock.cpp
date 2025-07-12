@@ -17,6 +17,12 @@
 #include "nvs.h"
 #include <internet_time.h>
 
+#include <esp_event.h>
+
+#include <esp_wifi.h>
+#include "wifi_provisioning/manager.h"
+#include "protocomm_ble.h"
+
 #define NIXIE_NVS_NAMESPACE "nixie_cfg"
 
 #define NUM_PIXELS 6
@@ -133,7 +139,6 @@ void clock_task(void* pvParameters) {
     led_set_color(255, 255, 0, 0);  // Yellow during sync
     led_set_effect(LED_CYCLIC);
     led_set_brightness(255);
-    update_hv_drivers(12, 34, 56);
 
     while (!is_time_synced()) {
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -314,12 +319,49 @@ void nixie_save_config_to_nvs(void) {
     nvs_close(nvs_handle);
 }
 
+void wifi_prov_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi Provisioning connected");
+    led_set_color(0, 0, 255, 0); // Solid blue when provisioning connected
+    led_set_effect(LED_SOLID);
+}
+
+void wifi_prov_started(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi Provisioning started");
+    led_set_color(0, 0, 255, 0); // Blinking blue when provisioning started
+    led_set_effect(LED_BREATHE);
+}
+
+void wifi_disconnected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi disconnected - waiting for connection");
+    led_set_color(0, 255, 255, 0); // Blinking teal while waiting for WiFi
+    led_set_effect(LED_BREATHE);
+}
+
+void wifi_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi connected - starting time sync");
+    led_set_color(255, 255, 0, 0);  // Cyclic yellow during time sync
+    led_set_effect(LED_CYCLIC);
+
+    // Start the clock task which will handle the time sync and then switch to normal mode
+    xTaskCreate(clock_task, "clock_task", 4096, NULL, 5, NULL);
+}
+
 void clock_init() {
     // Load configuration from NVS first
     nixie_load_config_from_nvs();
 
     oe_pwm_init(); // Initialize PWM for output enable pin
     spi_hv5222_init();
+    update_hv_drivers(99, 99, 99);
+
     led_init(nixie_led_config); // This now loads and applies saved LED config
-    xTaskCreate(clock_task, "Clock Task", 8192, NULL, 5, NULL);
+
+    led_set_effect(LED_BREATHE);  // Start with blinking teal waiting for WiFi
+    led_set_color(0, 255, 255, 0);  // Teal color
+
+    // Register event handlers for the LED flow
+    esp_event_handler_register(PROTOCOMM_TRANSPORT_BLE_EVENT, PROTOCOMM_TRANSPORT_BLE_CONNECTED, &wifi_prov_connected, NULL);
+    esp_event_handler_register(WIFI_PROV_EVENT, WIFI_PROV_START, &wifi_prov_started, NULL);
+    esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &wifi_disconnected, NULL);
+    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_connected, NULL);
 }

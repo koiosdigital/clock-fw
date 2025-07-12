@@ -17,6 +17,8 @@
 
 static const char* TAG = "internet_time";
 
+static bool synced = false;
+
 // Default time configuration
 static time_config_t time_config = {
     .auto_timezone = true,                    // Default to API fetch
@@ -34,13 +36,7 @@ esp_err_t itime_http_event_handler(esp_http_client_event_t* evt) {
 }
 
 bool is_time_synced() {
-    time_t now;
-    struct tm timeinfo;
-    time(&now);
-    localtime_r(&now, &timeinfo);
-
-    // Check if the year is valid (not 1970)
-    return (timeinfo.tm_year > 70);
+    return synced;
 }
 
 void setup_time_task(void* pvParameter) {
@@ -190,4 +186,5 @@ void time_apply_config(void) {
     }
 
     ESP_LOGI(TAG, "Time synchronization complete");
+    synced = true;
 }

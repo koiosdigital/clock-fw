@@ -10,6 +10,13 @@
 #include <esp_random.h>
 #include <time.h>
 #include <string.h>
+#include "internet_time.h"
+#include <esp_event.h>
+
+#include <esp_wifi.h>
+#include "wifi_provisioning/manager.h"
+#include "protocomm_ble.h"
+
 
 #define NUM_PIXELS 256
 
@@ -24,9 +31,7 @@ LEDConfig_t wordclock_led_config = {
     .is_rgbw = false,   // Assuming RGB, not RGBW
 };
 
-uint8_t* pixel_buffer = nullptr;
 uint8_t bits[NUM_PIXELS] = { 0 };
-bool on = true;
 char wordclock_words_buffer[128] = { 0 };
 
 bool add_word_to_buffer(const char* word)
@@ -198,13 +203,8 @@ end:
         return;
     }
 
-    // Update the pixel buffer based on the bits
-    for (int i = 0; i < NUM_PIXELS; i++) {
-        uint8_t value = bits[i] && on ? 255 : 0;
-        pixel_buffer[i * 3 + 0] = value; // R
-        pixel_buffer[i * 3 + 1] = value; // G
-        pixel_buffer[i * 3 + 2] = value; // B
-    }
+    // Set the LED mask based on the bits
+    led_set_mask(bits);
 }
 
 void clock_task(void* pvParameters) {
@@ -212,6 +212,22 @@ void clock_task(void* pvParameters) {
     struct tm timeinfo;
     int lastHour = -1;
     int lastMinute = -1;
+
+    ESP_LOGI("Clock", "Clock task started - waiting for time sync");
+
+    // Wait for time sync while LED shows cyclic yellow (set by wifi_connected handler)
+    while (!is_time_synced()) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    ESP_LOGI("Clock", "Time synced - switching to normal clock mode");
+
+    // Restore saved LED configuration for normal clock operation
+    led_persistent_config_t saved_config = led_get_persistent_config();
+    led_set_color(saved_config.r, saved_config.g, saved_config.b, saved_config.w);
+    led_set_effect(saved_config.effect);
+    led_set_brightness(saved_config.brightness);
+    led_set_speed(saved_config.speed);
 
     while (true) {
         time(&now);
@@ -225,21 +241,46 @@ void clock_task(void* pvParameters) {
             setTime(lastHour, lastMinute);
         }
 
-
         // Simulate a delay for the clock update
         vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
 
+void wifi_prov_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi Provisioning connected");
+    led_set_color(0, 0, 255, 0); // Solid blue when provisioning connected
+    led_set_effect(LED_SOLID);
+}
+
+void wifi_prov_started(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi Provisioning started");
+    led_set_color(0, 0, 255, 0); // Blinking blue when provisioning started
+    led_set_effect(LED_BREATHE);
+}
+
+void wifi_disconnected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi disconnected - waiting for connection");
+    led_set_color(0, 255, 255, 0); // Blinking teal while waiting for WiFi
+    led_set_effect(LED_BREATHE);
+}
+
+void wifi_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi connected - starting time sync");
+    led_set_color(255, 255, 0, 0);  // Cyclic yellow during time sync
+    led_set_effect(LED_CYCLIC);
+
+    // Start the clock task which will handle the time sync and then switch to normal mode
+    xTaskCreate(clock_task, "clock_task", 4096, NULL, 5, NULL);
+}
+
 void clock_init() {
     led_init(wordclock_led_config);
-    led_set_effect(LED_RAW_BUFFER);
-    pixel_buffer = led_get_buffer();
+    led_set_effect(LED_BREATHE);  // Start with blinking teal waiting for WiFi
+    led_set_color(0, 255, 255, 0);  // Teal color
 
-    if (pixel_buffer == nullptr) {
-        ESP_LOGE("Clock", "Failed to get pixel buffer");
-        return;
-    }
-
-    xTaskCreate(clock_task, "Clock Task", 8192, NULL, 5, NULL);
+    // Register event handlers for the LED flow
+    esp_event_handler_register(PROTOCOMM_TRANSPORT_BLE_EVENT, PROTOCOMM_TRANSPORT_BLE_CONNECTED, &wifi_prov_connected, NULL);
+    esp_event_handler_register(WIFI_PROV_EVENT, WIFI_PROV_START, &wifi_prov_started, NULL);
+    esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &wifi_disconnected, NULL);
+    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_connected, NULL);
 }
