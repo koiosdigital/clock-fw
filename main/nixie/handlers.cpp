@@ -30,6 +30,7 @@ esp_err_t led_config_get_handler(httpd_req_t* req) {
     case LED_BREATHE: effect_str = "breathe"; break;
     case LED_CYCLIC: effect_str = "cyclic"; break;
     case LED_RAINBOW: effect_str = "rainbow"; break;
+    default: break;
     }
 
     cJSON* mode = cJSON_CreateString(effect_str);
