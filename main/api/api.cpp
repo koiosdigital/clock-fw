@@ -36,6 +36,7 @@ void init_mdns() {
 void server_init() {
     /* Generate default configuration */
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.max_uri_handlers = 50;
 
     httpd_start(&kd_server, &config);
 }

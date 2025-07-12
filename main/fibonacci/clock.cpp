@@ -9,7 +9,18 @@
 #include <soc/gpio_num.h>
 #include <esp_random.h>
 #include <ctime>
+#include <cstring>
 #include "themes.h"
+#include "nvs_flash.h"
+#include "nvs.h"
+
+#include <esp_event.h>
+
+#include <esp_wifi.h>
+#include "wifi_provisioning/manager.h"
+#include "protocomm_ble.h"
+
+#define FIBONACCI_NVS_NAMESPACE "fib_cfg"
 
 #define NUM_PIXELS 9
 
@@ -21,7 +32,29 @@ LEDConfig_t fibonacci_led_config = {
 
 uint8_t* pixel_buffer = nullptr;
 uint8_t bits[NUM_PIXELS] = { 0 };
+uint8_t pixel_mask[NUM_PIXELS] = { 0 };
 bool on = true;
+
+static fibonacci_config_t fib_config = {
+    .brightness = 255,  // Default full brightness
+    .theme_id = 0       // Default to RGB theme
+};
+
+#define FIBONACCI_THEMES_COUNT (sizeof(colors) / sizeof(colors[0]))
+
+// Define the colors array (declared as extern in themes.h)
+fibonacci_colorTheme colors[] = {
+    { 0, "RGB",     0xFF0A0A, 0x0AFF0A, 0x0A0AFF },
+    { 1, "Mondrian",0xFF0A0A, 0xF8DE00, 0x0A0AFF },
+    { 2, "Basbrun", 0x502800, 0x14C814, 0xFF640A },
+    { 3, "80's",    0xF564C9, 0x72F736, 0x71EBDC },
+    { 4, "Pastel",  0xFF7B7B, 0x8FFF70, 0x7878FF },
+    { 5, "Modern",  0xD4312D, 0x91D231, 0x8D5FE0 },
+    { 6, "Cold",    0xD13EC8, 0x45E8E0, 0x5046CA },
+    { 7, "Warm",    0xED1414, 0xF6F336, 0xFF7E15 },
+    { 8, "Earth",   0x462300, 0x467A0A, 0xC8B600 },
+    { 9, "Dark",    0xD32222, 0x50974E, 0x101895 }
+};
 
 int random(int max)
 {
@@ -33,8 +66,6 @@ void setPixelHelper(uint8_t pixel, uint32_t color)
     pixel_buffer[pixel * 3] = (color >> 16) & 0xFF; // Red
     pixel_buffer[pixel * 3 + 1] = (color >> 8) & 0xFF; // Green
     pixel_buffer[pixel * 3 + 2] = color & 0xFF; // Blue
-    ESP_LOGI("clock", "Set pixel %d to color %02X %02X %02X", pixel,
-        pixel_buffer[pixel * 3], pixel_buffer[pixel * 3 + 1], pixel_buffer[pixel * 3 + 2]);
 }
 
 void setPixel(uint8_t pixel, uint32_t color)
@@ -268,6 +299,9 @@ void setBits(uint8_t value, uint8_t offset)
 
 void setTime(uint8_t hours, uint8_t minutes)
 {
+    // Clear all pixels first
+    memset(pixel_buffer, 0, NUM_PIXELS * 3);
+
     for (int i = 0; i < NUM_PIXELS; i++)
         bits[i] = 0;
 
@@ -278,16 +312,16 @@ void setTime(uint8_t hours, uint8_t minutes)
     {
         switch (bits[i]) {
         case 1:
-            setPixel(i, colors[0].hour_color);
+            setPixel(i, colors[fib_config.theme_id].hour_color);
             break;
         case 2:
-            setPixel(i, colors[0].minute_color);
+            setPixel(i, colors[fib_config.theme_id].minute_color);
             break;
         case 3:
-            setPixel(i, colors[0].both_color);
+            setPixel(i, colors[fib_config.theme_id].both_color);
             break;
         default:
-            setPixel(i, 0xFFFFFF); // Off color (white)
+            setPixel(i, 0x000000); // Off color (black)
             break;
         }
     }
@@ -298,6 +332,8 @@ void clock_task(void* pvParameters) {
     struct tm timeinfo;
     int lastHour = -1;
     int lastMinute = -1;
+
+    led_set_effect(LED_RAW_BUFFER);
 
     while (true) {
         time(&now);
@@ -317,9 +353,38 @@ void clock_task(void* pvParameters) {
     }
 }
 
+void wifi_prov_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi Provisioning connected");
+    led_set_color(0, 0, 255, 0); // Solid blue when provisioning connected
+    led_set_effect(LED_SOLID);
+}
+
+void wifi_prov_started(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi Provisioning started");
+    led_set_color(0, 0, 255, 0); // Blinking blue when provisioning started
+    led_set_effect(LED_BREATHE);
+}
+
+void wifi_disconnected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi disconnected - waiting for connection");
+    led_set_color(0, 255, 255, 0); // Blinking teal while waiting for WiFi
+    led_set_effect(LED_BREATHE);
+}
+
+void wifi_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi connected - starting time sync");
+    led_set_color(255, 255, 0, 0);  // Cyclic yellow during time sync
+    led_set_effect(LED_CYCLIC);
+
+    // Start the clock task which will handle the time sync and then switch to normal mode
+    xTaskCreate(clock_task, "clock_task", 4096, NULL, 5, NULL);
+}
+
 void clock_init() {
+    // Load configuration from NVS first
+    fibonacci_load_config_from_nvs();
+
     led_init(fibonacci_led_config);
-    led_set_effect(LED_RAW_BUFFER);
     pixel_buffer = led_get_buffer();
 
     if (pixel_buffer == nullptr) {
@@ -327,5 +392,105 @@ void clock_init() {
         return;
     }
 
-    xTaskCreate(clock_task, "Clock Task", 4096, NULL, 5, NULL);
+    led_set_effect(LED_BREATHE);  // Start with blinking teal waiting for WiFi
+    led_set_color(0, 255, 255, 0);  // Teal color
+
+    // Register event handlers for the LED flow
+    esp_event_handler_register(PROTOCOMM_TRANSPORT_BLE_EVENT, PROTOCOMM_TRANSPORT_BLE_CONNECTED, &wifi_prov_connected, NULL);
+    esp_event_handler_register(WIFI_PROV_EVENT, WIFI_PROV_START, &wifi_prov_started, NULL);
+    esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &wifi_disconnected, NULL);
+    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_connected, NULL);
+}
+
+// Fibonacci configuration functions
+void fibonacci_set_brightness(uint8_t brightness) {
+    fib_config.brightness = brightness;
+    led_set_brightness(brightness);
+    fibonacci_save_config_to_nvs();
+}
+
+uint8_t fibonacci_get_brightness(void) {
+    return fib_config.brightness;
+}
+
+void fibonacci_set_theme(uint8_t theme_id) {
+    if (theme_id < FIBONACCI_THEMES_COUNT) {
+        fib_config.theme_id = theme_id;
+        fibonacci_save_config_to_nvs();
+    }
+}
+
+uint8_t fibonacci_get_theme(void) {
+    return fib_config.theme_id;
+}
+
+fibonacci_config_t fibonacci_get_config(void) {
+    return fib_config;
+}
+
+void fibonacci_set_config(const fibonacci_config_t* config) {
+    if (config == NULL) return;
+
+    fibonacci_set_brightness(config->brightness);
+    fibonacci_set_theme(config->theme_id);
+}
+
+uint8_t fibonacci_get_themes_count(void) {
+    return FIBONACCI_THEMES_COUNT;
+}
+
+const fibonacci_colorTheme* fibonacci_get_theme_info(uint8_t theme_id) {
+    if (theme_id < FIBONACCI_THEMES_COUNT) {
+        return &colors[theme_id];
+    }
+    return NULL;
+}
+
+void fibonacci_load_config_from_nvs(void) {
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open(FIBONACCI_NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGI("FIBONACCI", "NVS namespace not found, using defaults");
+        return;
+    }
+
+    size_t required_size = sizeof(fibonacci_config_t);
+    err = nvs_get_blob(nvs_handle, "config", &fib_config, &required_size);
+    if (err != ESP_OK) {
+        ESP_LOGI("FIBONACCI", "Config not found in NVS, using defaults");
+    }
+    else {
+        ESP_LOGI("FIBONACCI", "Loaded config from NVS: brightness=%d, theme_id=%d",
+            fib_config.brightness, fib_config.theme_id);
+
+        // Apply loaded brightness to LED system
+        led_set_brightness(fib_config.brightness);
+    }
+
+    nvs_close(nvs_handle);
+}
+
+void fibonacci_save_config_to_nvs(void) {
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open(FIBONACCI_NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE("FIBONACCI", "Failed to open NVS for writing: %s", esp_err_to_name(err));
+        return;
+    }
+
+    err = nvs_set_blob(nvs_handle, "config", &fib_config, sizeof(fibonacci_config_t));
+    if (err != ESP_OK) {
+        ESP_LOGE("FIBONACCI", "Failed to save config to NVS: %s", esp_err_to_name(err));
+    }
+    else {
+        err = nvs_commit(nvs_handle);
+        if (err != ESP_OK) {
+            ESP_LOGE("FIBONACCI", "Failed to commit NVS: %s", esp_err_to_name(err));
+        }
+        else {
+            ESP_LOGI("FIBONACCI", "Config saved to NVS");
+        }
+    }
+
+    nvs_close(nvs_handle);
 }

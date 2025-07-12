@@ -10,6 +10,7 @@ typedef enum LEDEffect_t {
     LED_BREATHE,
     LED_CYCLIC,
     LED_RAINBOW,
+    LED_RAW_BUFFER, //raw buffer effect - internal use only
 } LEDEffect_t;
 
 typedef struct LEDConfig_t {

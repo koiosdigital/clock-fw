@@ -229,6 +229,9 @@ void led_loop() {
     case LED_RAINBOW:
         // Implement rainbow effect here
         break;
+    case LED_RAW_BUFFER:
+        // Raw buffer effect - no processing, direct buffer access
+        break;
     }
 }
 
