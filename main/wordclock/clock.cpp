@@ -250,24 +250,28 @@ void wifi_prov_connected(void* arg, esp_event_base_t event_base, int32_t event_i
     ESP_LOGI("Clock", "WiFi Provisioning connected");
     led_set_color(0, 0, 255, 0); // Solid blue when provisioning connected
     led_set_effect(LED_SOLID);
+    led_set_brightness(50);
 }
 
 void wifi_prov_started(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     ESP_LOGI("Clock", "WiFi Provisioning started");
     led_set_color(0, 0, 255, 0); // Blinking blue when provisioning started
     led_set_effect(LED_BREATHE);
+    led_set_brightness(50);
 }
 
 void wifi_disconnected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     ESP_LOGI("Clock", "WiFi disconnected - waiting for connection");
     led_set_color(0, 255, 255, 0); // Blinking teal while waiting for WiFi
     led_set_effect(LED_BREATHE);
+    led_set_brightness(50);
 }
 
 void wifi_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     ESP_LOGI("Clock", "WiFi connected - starting time sync");
     led_set_color(255, 255, 0, 0);  // Cyclic yellow during time sync
     led_set_effect(LED_CYCLIC);
+    led_set_brightness(50);
 
     // Start the clock task which will handle the time sync and then switch to normal mode
     xTaskCreate(clock_task, "clock_task", 4096, NULL, 5, NULL);
@@ -277,6 +281,7 @@ void clock_init() {
     led_init(wordclock_led_config);
     led_set_effect(LED_BREATHE);  // Start with blinking teal waiting for WiFi
     led_set_color(0, 255, 255, 0);  // Teal color
+    led_set_brightness(50);
 
     // Register event handlers for the LED flow
     esp_event_handler_register(PROTOCOMM_TRANSPORT_BLE_EVENT, PROTOCOMM_TRANSPORT_BLE_CONNECTED, &wifi_prov_connected, NULL);
