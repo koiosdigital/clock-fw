@@ -7,7 +7,7 @@ list(FILTER NESTED_SRC EXCLUDE REGEX ".*/handlers.cpp$")
 
 #if build variant is "devel", set to "fibonacci"
 if (BUILD_VARIANT STREQUAL "devel")
-    set(BUILD_VARIANT "wordclock")
+    set(BUILD_VARIANT "fibonacci")
     add_compile_definitions(FIRMWARE_VARIANT="${BUILD_VARIANT}")
 endif()
 

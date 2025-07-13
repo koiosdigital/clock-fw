@@ -278,7 +278,7 @@ void api_init() {
         .user_ctx = NULL
     };
     httpd_uri_t about_uri = {
-        .uri = "/api/about",
+        .uri = "/api/system/about",
         .method = HTTP_GET,
         .handler = about_handler,
         .user_ctx = NULL
@@ -296,7 +296,7 @@ void api_init() {
         .user_ctx = NULL
     };
     httpd_uri_t time_zones_uri = {
-        .uri = "/api/time/zones",
+        .uri = "/api/time/zonedb",
         .method = HTTP_GET,
         .handler = time_zones_handler,
         .user_ctx = NULL

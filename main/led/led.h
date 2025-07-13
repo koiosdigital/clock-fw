@@ -25,29 +25,26 @@ typedef struct {
     uint8_t r, g, b, w;
     uint8_t brightness;
     uint8_t speed;
+    bool on; // Track if LEDs are currently on
 } led_persistent_config_t;
 
 void led_set_effect(LEDEffect_t effect);
 void led_set_color(uint8_t r, uint8_t g, uint8_t b, uint8_t w);
 void led_set_speed(uint8_t speed);
-uint8_t* led_get_buffer();
 void led_set_brightness(uint8_t brightness);
+void led_set_on_state(bool on);
+
+uint8_t* led_get_buffer();
 void led_fade_out();
 void led_fade_in();
 void led_init(LEDConfig_t config);
+bool led_is_rgbw();
 
 // LED mask functions
 void led_set_mask(const uint8_t* mask);
 void led_clear_mask();
 const uint8_t* led_get_mask();
 
-LEDEffect_t led_get_effect();
-void led_get_color(uint8_t* r, uint8_t* g, uint8_t* b, uint8_t* w);
-uint8_t led_get_brightness();
-uint8_t led_get_speed();
-
-// NVS functions
-led_persistent_config_t led_get_persistent_config(void);
-void led_set_persistent_config(const led_persistent_config_t* config);
-void led_load_config_from_nvs(void);
-void led_save_config_to_nvs(void);
+void led_load_from_nvs(led_persistent_config_t* config);
+void led_save_to_nvs(led_persistent_config_t* config);
+void led_apply_persistent_config(led_persistent_config_t* config);

@@ -11,31 +11,27 @@
 
 #define LED_NVS_NAMESPACE "led_cfg"
 
-// Default LED persistent configuration
-static led_persistent_config_t led_persistent_config = {
-    .effect = LED_SOLID,
-    .r = 255, .g = 0, .b = 0, .w = 0,  // Default red
-    .brightness = 255,
-    .speed = 10
-};
+static uint16_t led_count = 0;
+static bool is_rgbw = false;
 
 LEDEffect_t current_effect = LED_OFF;
 static uint8_t led_speed = 10;
 static uint8_t led_brightness = 255;
 static uint8_t led_color[4] = { 0, 0, 0, 0 };
+static bool leds_on = false;
+
 static bool fading_out = false;
+static bool fading_in = false;
+
 static uint32_t blink_changed_at = 0;
 static bool blink_state = false;
-static bool fading_in = false;
-static uint16_t led_count = 0;
-static bool is_rgbw = false;
 
 uint8_t* led_buffer = nullptr;
 uint8_t* led_mask = nullptr;
 
+//Setters
 void led_set_effect(LEDEffect_t effect) {
     current_effect = effect;
-    led_persistent_config.effect = effect;
 }
 
 void led_set_color(uint8_t r, uint8_t g, uint8_t b, uint8_t w) {
@@ -43,41 +39,21 @@ void led_set_color(uint8_t r, uint8_t g, uint8_t b, uint8_t w) {
     led_color[1] = g;
     led_color[2] = b;
     led_color[3] = w;
-    led_persistent_config.r = r;
-    led_persistent_config.g = g;
-    led_persistent_config.b = b;
-    led_persistent_config.w = w;
 }
 
 void led_set_speed(uint8_t speed) {
     led_speed = speed;
-    led_persistent_config.speed = speed;
 }
 
 void led_set_brightness(uint8_t brightness) {
     led_brightness = brightness;
-    led_persistent_config.brightness = brightness;
 }
 
-LEDEffect_t led_get_effect() {
-    return current_effect;
+void led_set_on_state(bool on) {
+    leds_on = on;
 }
 
-void led_get_color(uint8_t* r, uint8_t* g, uint8_t* b, uint8_t* w) {
-    if (r) *r = led_color[0];
-    if (g) *g = led_color[1];
-    if (b) *b = led_color[2];
-    if (w) *w = led_color[3];
-}
-
-uint8_t led_get_brightness() {
-    return led_brightness;
-}
-
-uint8_t led_get_speed() {
-    return led_speed;
-}
-
+//Helpers
 void led_fade_out() {
     fading_out = true;
     fading_in = false;
@@ -86,6 +62,10 @@ void led_fade_out() {
 void led_fade_in() {
     fading_in = true;
     fading_out = false;
+}
+
+bool led_is_rgbw() {
+    return is_rgbw;
 }
 
 void handle_fading() {
@@ -105,18 +85,19 @@ void handle_fading() {
     }
 }
 
-void tx_buf_fill_color(uint8_t r, uint8_t g, uint8_t b) {
+void tx_buf_fill_color(uint8_t r, uint8_t g, uint8_t b, uint8_t w) {
     for (int i = 0; i < led_count; i++) {
         // Apply mask - only set color if mask bit is 1
         uint8_t masked_r = led_mask[i] ? r : 0;
         uint8_t masked_g = led_mask[i] ? g : 0;
         uint8_t masked_b = led_mask[i] ? b : 0;
+        uint8_t masked_w = led_mask[i] ? w : 0;
 
         if (is_rgbw) {
             led_buffer[i * 4 + 0] = masked_g;
             led_buffer[i * 4 + 1] = masked_r;
             led_buffer[i * 4 + 2] = masked_b;
-            led_buffer[i * 4 + 3] = 0;
+            led_buffer[i * 4 + 3] = masked_w;
         }
         else {
             led_buffer[i * 3 + 0] = masked_g;
@@ -126,7 +107,7 @@ void tx_buf_fill_color(uint8_t r, uint8_t g, uint8_t b) {
     }
 }
 
-void tx_buf_set_color_at(int index, uint8_t r, uint8_t g, uint8_t b) {
+void tx_buf_set_color_at(int index, uint8_t r, uint8_t g, uint8_t b, uint8_t w) {
     if (index < 0 || index >= led_count) {
         return;
     }
@@ -135,12 +116,13 @@ void tx_buf_set_color_at(int index, uint8_t r, uint8_t g, uint8_t b) {
     uint8_t masked_r = led_mask[index] ? r : 0;
     uint8_t masked_g = led_mask[index] ? g : 0;
     uint8_t masked_b = led_mask[index] ? b : 0;
+    uint8_t masked_w = led_mask[index] ? w : 0;
 
     if (is_rgbw) {
         led_buffer[index * 4 + 0] = masked_g;
         led_buffer[index * 4 + 1] = masked_r;
         led_buffer[index * 4 + 2] = masked_b;
-        led_buffer[index * 4 + 3] = 0;
+        led_buffer[index * 4 + 3] = masked_w;
     }
     else {
         led_buffer[index * 3 + 0] = masked_g;
@@ -155,10 +137,10 @@ void led_blink() {
     if (xTaskGetTickCount() - blink_changed_at > pdMS_TO_TICKS(changeInterval)) {
         blink_state = !blink_state;
         if (blink_state) {
-            tx_buf_fill_color(led_color[0], led_color[1], led_color[2]);
+            tx_buf_fill_color(led_color[0], led_color[1], led_color[2], led_color[3]);
         }
         else {
-            tx_buf_fill_color(0, 0, 0);
+            tx_buf_fill_color(0, 0, 0, 0);
         }
         blink_changed_at = xTaskGetTickCount();
     }
@@ -183,7 +165,7 @@ void led_breathe() {
         }
     }
 
-    tx_buf_fill_color(led_color[0] * brightness / 255, led_color[1] * brightness / 255, led_color[2] * brightness / 255);
+    tx_buf_fill_color(led_color[0] * brightness / 255, led_color[1] * brightness / 255, led_color[2] * brightness / 255, led_color[3] * brightness / 255);
 }
 
 //LEDs are arranged in a circle, loading spinner effect
@@ -197,10 +179,10 @@ void led_cyclic() {
         offset = (offset + 1) % led_count;
         for (int i = 0; i < led_count; i++) {
             if (i < trail_size) {
-                tx_buf_set_color_at((i + offset) % led_count, led_color[0], led_color[1], led_color[2]);
+                tx_buf_set_color_at((i + offset) % led_count, led_color[0], led_color[1], led_color[2], led_color[3]);
             }
             else {
-                tx_buf_set_color_at((i + offset) % led_count, 0, 0, 0);
+                tx_buf_set_color_at((i + offset) % led_count, 0, 0, 0, 0);
             }
         }
         last_update = xTaskGetTickCount();
@@ -212,10 +194,10 @@ void led_loop() {
 
     switch (current_effect) {
     case LED_OFF:
-        tx_buf_fill_color(0, 0, 0);
+        tx_buf_fill_color(0, 0, 0, 0);
         break;
     case LED_SOLID:
-        tx_buf_fill_color(led_color[0] * led_brightness / 255, led_color[1] * led_brightness / 255, led_color[2] * led_brightness / 255);
+        tx_buf_fill_color(led_color[0] * led_brightness / 255, led_color[1] * led_brightness / 255, led_color[2] * led_brightness / 255, led_color[3] * led_brightness / 255);
         break;
     case LED_BLINK:
         led_blink();
@@ -285,49 +267,31 @@ void led_task(void* pvParameter) {
 
 void led_init(LEDConfig_t led_config)
 {
-    // Load saved configuration from NVS
-    led_load_config_from_nvs();
-
-    // Apply loaded configuration
-    current_effect = led_persistent_config.effect;
-    led_color[0] = led_persistent_config.r;
-    led_color[1] = led_persistent_config.g;
-    led_color[2] = led_persistent_config.b;
-    led_color[3] = led_persistent_config.w;
-    led_brightness = led_persistent_config.brightness;
-    led_speed = led_persistent_config.speed;
-
-
     LEDConfig_t* pConfig = (LEDConfig_t*)malloc(sizeof(LEDConfig_t));
     memcpy(pConfig, &led_config, sizeof(led_config));
 
     xTaskCreate(led_task, "led_task", 4096, pConfig, 5, NULL);
+
+    led_persistent_config_t persistent_config;
+    led_load_from_nvs(&persistent_config);
+    led_apply_persistent_config(&persistent_config);
 }
 
-// NVS configuration functions
-led_persistent_config_t led_get_persistent_config(void) {
-    led_load_config_from_nvs();
-    return led_persistent_config;
+void led_apply_persistent_config(led_persistent_config_t* config) {
+    if (config == nullptr) {
+        ESP_LOGE("LED", "Invalid persistent config pointer");
+        return;
+    }
+
+    // Apply loaded or default configuration
+    led_set_effect(config->effect);
+    led_set_color(config->r, config->g, config->b, config->w);
+    led_set_brightness(config->brightness);
+    led_set_speed(config->speed);
+    led_set_on_state(config->on);
 }
 
-void led_set_persistent_config(const led_persistent_config_t* config) {
-    if (config == NULL) return;
-
-    led_persistent_config = *config;
-
-    // Apply to current LED state
-    current_effect = config->effect;
-    led_color[0] = config->r;
-    led_color[1] = config->g;
-    led_color[2] = config->b;
-    led_color[3] = config->w;
-    led_brightness = config->brightness;
-    led_speed = config->speed;
-
-    led_save_config_to_nvs();
-}
-
-void led_load_config_from_nvs(void) {
+void led_load_from_nvs(led_persistent_config_t* config) {
     nvs_handle_t nvs_handle;
     esp_err_t err = nvs_open(LED_NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
     if (err != ESP_OK) {
@@ -336,21 +300,23 @@ void led_load_config_from_nvs(void) {
     }
 
     size_t required_size = sizeof(led_persistent_config_t);
-    err = nvs_get_blob(nvs_handle, "config", &led_persistent_config, &required_size);
+    err = nvs_get_blob(nvs_handle, "config", config, &required_size);
     if (err != ESP_OK) {
         ESP_LOGI("LED", "Config not found in NVS, using defaults");
-    }
-    else {
-        ESP_LOGI("LED", "Loaded config from NVS: effect=%d, color=(%d,%d,%d,%d), brightness=%d, speed=%d",
-            led_persistent_config.effect, led_persistent_config.r, led_persistent_config.g,
-            led_persistent_config.b, led_persistent_config.w, led_persistent_config.brightness,
-            led_persistent_config.speed);
+        config->effect = LED_SOLID;
+        config->r = 100;
+        config->g = 100;
+        config->b = 100;
+        config->w = 100;
+        config->brightness = 100;
+        config->speed = 10;
+        config->on = true;
     }
 
     nvs_close(nvs_handle);
 }
 
-void led_save_config_to_nvs(void) {
+void led_save_to_nvs(led_persistent_config_t* config) {
     nvs_handle_t nvs_handle;
     esp_err_t err = nvs_open(LED_NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
     if (err != ESP_OK) {
@@ -358,7 +324,7 @@ void led_save_config_to_nvs(void) {
         return;
     }
 
-    err = nvs_set_blob(nvs_handle, "config", &led_persistent_config, sizeof(led_persistent_config_t));
+    err = nvs_set_blob(nvs_handle, "config", config, sizeof(led_persistent_config_t));
     if (err != ESP_OK) {
         ESP_LOGE("LED", "Failed to save config to NVS: %s", esp_err_to_name(err));
     }

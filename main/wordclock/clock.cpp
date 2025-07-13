@@ -199,7 +199,6 @@ void setTime(int hour, int minute) {
 end:
     // Convert the word buffer to bits
     if (!word_buffer_to_bits(wordclock_words_buffer, letters, bits, NUM_PIXELS)) {
-        ESP_LOGE("Clock", "Failed to convert word buffer to bits");
         return;
     }
 
@@ -213,21 +212,19 @@ void clock_task(void* pvParameters) {
     int lastHour = -1;
     int lastMinute = -1;
 
-    ESP_LOGI("Clock", "Clock task started - waiting for time sync");
+    led_set_color(255, 255, 0, 0);  // Yellow during sync
+    led_set_effect(LED_CYCLIC);
+    led_set_brightness(255);
 
     // Wait for time sync while LED shows cyclic yellow (set by wifi_connected handler)
     while (!is_time_synced()) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    ESP_LOGI("Clock", "Time synced - switching to normal clock mode");
-
-    // Restore saved LED configuration for normal clock operation
-    led_persistent_config_t saved_config = led_get_persistent_config();
-    led_set_color(saved_config.r, saved_config.g, saved_config.b, saved_config.w);
-    led_set_effect(saved_config.effect);
-    led_set_brightness(saved_config.brightness);
-    led_set_speed(saved_config.speed);
+    // Restore saved LED configuration after sync
+    led_persistent_config_t persistent_config;
+    led_load_from_nvs(&persistent_config);
+    led_apply_persistent_config(&persistent_config);
 
     while (true) {
         time(&now);
@@ -247,33 +244,24 @@ void clock_task(void* pvParameters) {
 }
 
 void wifi_prov_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-    ESP_LOGI("Clock", "WiFi Provisioning connected");
     led_set_color(0, 0, 255, 0); // Solid blue when provisioning connected
     led_set_effect(LED_SOLID);
     led_set_brightness(50);
 }
 
 void wifi_prov_started(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-    ESP_LOGI("Clock", "WiFi Provisioning started");
     led_set_color(0, 0, 255, 0); // Blinking blue when provisioning started
     led_set_effect(LED_BREATHE);
     led_set_brightness(50);
 }
 
 void wifi_disconnected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-    ESP_LOGI("Clock", "WiFi disconnected - waiting for connection");
     led_set_color(0, 255, 255, 0); // Blinking teal while waiting for WiFi
     led_set_effect(LED_BREATHE);
     led_set_brightness(50);
 }
 
 void wifi_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-    ESP_LOGI("Clock", "WiFi connected - starting time sync");
-    led_set_color(255, 255, 0, 0);  // Cyclic yellow during time sync
-    led_set_effect(LED_CYCLIC);
-    led_set_brightness(50);
-
-    // Start the clock task which will handle the time sync and then switch to normal mode
     xTaskCreate(clock_task, "clock_task", 4096, NULL, 5, NULL);
 }
 
