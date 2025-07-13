@@ -170,8 +170,8 @@ void led_breathe() {
 
     if (increasing) {
         brightness += 5;
-        if (brightness >= 255) {
-            brightness = 255;
+        if (brightness >= led_brightness) {
+            brightness = led_brightness;
             increasing = false;
         }
     }
