@@ -5,10 +5,14 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include <string.h>
+#include "../api/api.h"  // For set_cors_headers function
 
 #define NIXIE_NVS_NAMESPACE "nixie_cfg"
 
 esp_err_t nixie_config_get_handler(httpd_req_t* req) {
+    // Set CORS headers
+    set_cors_headers(req);
+
     nixie_config_t config;
     nixie_load_from_nvs(&config);
 
@@ -46,6 +50,9 @@ esp_err_t nixie_config_get_handler(httpd_req_t* req) {
 }
 
 esp_err_t nixie_config_post_handler(httpd_req_t* req) {
+    // Set CORS headers
+    set_cors_headers(req);
+
     char content[512];
     int ret = httpd_req_recv(req, content, sizeof(content) - 1);
     if (ret <= 0) {

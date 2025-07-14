@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 // Include the configuration structure definition
-#include "../fibonacci_handlers.h"
+#include "fibonacci_handlers.h"
 
 // Fibonacci configuration functions (simplified - no getters)
 void fibonacci_set_brightness(uint8_t brightness);

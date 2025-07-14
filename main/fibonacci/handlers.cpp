@@ -1,6 +1,6 @@
 #include "handlers.h"
 #include "../api/led_handlers.h"
-#include "../fibonacci_handlers.h"
+#include "fibonacci_handlers.h"
 #include "esp_log.h"
 
 static const char* TAG = "fibonacci_handlers";

@@ -6,12 +6,16 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include <string.h>
+#include "api/api.h"  // For set_cors_headers function
 
 #define FIBONACCI_NVS_NAMESPACE "fib_cfg"
 
 static const char* TAG = "FIBONACCI_API_HANDLERS";
 
 esp_err_t fibonacci_config_get_handler(httpd_req_t* req) {
+    // Set CORS headers
+    set_cors_headers(req);
+
     fibonacci_config_t config;
     fibonacci_load_from_nvs(&config);
 
@@ -51,6 +55,9 @@ esp_err_t fibonacci_config_get_handler(httpd_req_t* req) {
 }
 
 esp_err_t fibonacci_config_post_handler(httpd_req_t* req) {
+    // Set CORS headers
+    set_cors_headers(req);
+
     char content[512];
     int ret = httpd_req_recv(req, content, sizeof(content) - 1);
     if (ret <= 0) {
@@ -114,6 +121,9 @@ esp_err_t fibonacci_config_post_handler(httpd_req_t* req) {
 }
 
 esp_err_t fibonacci_themes_handler(httpd_req_t* req) {
+    // Set CORS headers
+    set_cors_headers(req);
+
     // Create JSON array response
     cJSON* json = cJSON_CreateArray();
     if (json == NULL) {

@@ -5,6 +5,12 @@
 
 httpd_handle_t get_httpd_handle();
 
+// Helper function to set CORS headers
+void set_cors_headers(httpd_req_t* req);
+
+// Generic OPTIONS handler for CORS preflight requests  
+esp_err_t options_handler(httpd_req_t* req);
+
 //renamed bc of conflict with esp-idf's mdns
 void init_mdns();
 

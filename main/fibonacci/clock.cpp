@@ -1,5 +1,5 @@
 #include "clock.h"
-#include "../fibonacci_handlers.h"
+#include "fibonacci_handlers.h"
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -22,7 +22,7 @@
 #define NUM_PIXELS 9
 
 LEDConfig_t fibonacci_led_config = {
-    .pin = (gpio_num_t)14,  // Example GPIO pin
+    .pin = (gpio_num_t)4,  // Example GPIO pin
     .count = NUM_PIXELS,
     .is_rgbw = false,   // Assuming RGB, not RGBW
 };

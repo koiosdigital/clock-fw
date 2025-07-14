@@ -3,8 +3,12 @@
 #include "cJSON.h"
 #include "esp_log.h"
 #include <string.h>
+#include "api.h"  // For set_cors_headers function
 
 esp_err_t led_config_get_handler(httpd_req_t* req) {
+    // Set CORS headers
+    set_cors_headers(req);
+
     led_persistent_config_t config;
     led_load_from_nvs(&config);
 
@@ -68,6 +72,9 @@ esp_err_t led_config_get_handler(httpd_req_t* req) {
 }
 
 esp_err_t led_config_post_handler(httpd_req_t* req) {
+    // Set CORS headers
+    set_cors_headers(req);
+
     char content[512];
     int ret = httpd_req_recv(req, content, sizeof(content) - 1);
     if (ret <= 0) {

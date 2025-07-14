@@ -8,9 +8,18 @@
 #include "internet_time.h"
 #include "embedded_tz_db.h"
 #include <esp_app_desc.h>
+#include <string.h>
 
 /* Empty handle to esp_http_server */
 httpd_handle_t kd_server = NULL;
+
+// Helper function to set CORS headers
+void set_cors_headers(httpd_req_t* req) {
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    httpd_resp_set_hdr(req, "Access-Control-Max-Age", "86400");
+}
 
 httpd_handle_t get_httpd_handle() {
     return kd_server;
@@ -42,6 +51,9 @@ void server_init() {
 }
 
 esp_err_t root_handler(httpd_req_t* req) {
+    // Set CORS headers
+    set_cors_headers(req);
+
     // Handle root requests
     const char* response = "Welcome to the KD Clock API!";
     httpd_resp_send(req, response, strlen(response));
@@ -49,6 +61,9 @@ esp_err_t root_handler(httpd_req_t* req) {
 }
 
 esp_err_t about_handler(httpd_req_t* req) {
+    // Set CORS headers
+    set_cors_headers(req);
+
     // Get app description and hostname
     const esp_app_desc_t* app_desc = esp_app_get_description();
     const char* hostname = kd_common_get_device_name();
@@ -85,6 +100,9 @@ esp_err_t about_handler(httpd_req_t* req) {
 }
 
 esp_err_t time_config_get_handler(httpd_req_t* req) {
+    // Set CORS headers
+    set_cors_headers(req);
+
     // Get current time configuration
     time_config_t config = time_get_config();
 
@@ -120,6 +138,9 @@ esp_err_t time_config_get_handler(httpd_req_t* req) {
 }
 
 esp_err_t time_config_post_handler(httpd_req_t* req) {
+    // Set CORS headers
+    set_cors_headers(req);
+
     char content[512];
     int ret = httpd_req_recv(req, content, sizeof(content) - 1);
     if (ret <= 0) {
@@ -185,6 +206,9 @@ esp_err_t time_config_post_handler(httpd_req_t* req) {
 }
 
 esp_err_t time_zones_handler(httpd_req_t* req) {
+    // Set CORS headers
+    set_cors_headers(req);
+
     // Get all available timezones
     const embeddedTz_t* zones = tz_db_get_all_zones();
 
