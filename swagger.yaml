@@ -67,33 +67,33 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
-  /api/time/config:
+  /api/system/config:
     get:
       tags:
-        - Time
-      summary: Get time configuration
-      description: Returns current time and timezone configuration
+        - System
+      summary: Get system configuration
+      description: Returns current time, timezone, and WiFi hostname configuration
       responses:
         "200":
-          description: Time configuration
+          description: System configuration
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TimeConfig"
+                $ref: "#/components/schemas/SystemConfig"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
     post:
       tags:
-        - Time
-      summary: Update time configuration
-      description: Updates timezone and NTP server settings. Restart required to apply changes.
+        - System
+      summary: Update system configuration
+      description: Updates timezone, NTP server, and WiFi hostname settings. Restart required to apply changes.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TimeConfigRequest"
+              $ref: "#/components/schemas/SystemConfigRequest"
       responses:
         "200":
           description: Configuration updated successfully
@@ -174,6 +174,38 @@ paths:
           $ref: "#/components/responses/RequestTimeout"
         "500":
           $ref: "#/components/responses/InternalServerError"
+
+  /api/leds/ws:
+    get:
+      tags:
+        - LEDs
+        - WebSocket
+      summary: LED WebSocket connection
+      description: |
+        Establishes a WebSocket connection for real-time LED control.
+
+        **Connection Behavior:**
+        - On connect: Server immediately sends current LED state
+        - On update: Server broadcasts updated state to all connected clients
+
+        **Message Format:**
+        - Send: JSON with any LED configuration fields to update
+        - Receive: Complete LED state object
+
+        **Example Usage:**
+        ```javascript
+        const ws = new WebSocket('ws://device-ip/api/leds/ws');
+        ws.onmessage = (event) => {
+          const ledState = JSON.parse(event.data);
+          console.log('LED state:', ledState);
+        };
+        ws.send(JSON.stringify({color: {r: 255, g: 0, b: 0}}));
+        ```
+      responses:
+        "101":
+          description: WebSocket connection established
+        "400":
+          description: WebSocket upgrade failed
 
   /api/fibonacci/config:
     get:
@@ -298,12 +330,13 @@ components:
           description: Device hostname
           example: "kd-clock-001"
 
-    TimeConfig:
+    SystemConfig:
       type: object
       required:
         - auto_timezone
         - timezone
         - ntp_server
+        - wifi_hostname
       properties:
         auto_timezone:
           type: boolean
@@ -319,8 +352,13 @@ components:
           maxLength: 127
           description: NTP server URL for time synchronization
           example: "pool.ntp.org"
+        wifi_hostname:
+          type: string
+          maxLength: 63
+          description: WiFi hostname for network identification
+          example: "clock-12345"
 
-    TimeConfigRequest:
+    SystemConfigRequest:
       type: object
       properties:
         auto_timezone:
@@ -337,6 +375,11 @@ components:
           maxLength: 127
           description: NTP server URL for time synchronization
           example: "pool.ntp.org"
+        wifi_hostname:
+          type: string
+          maxLength: 63
+          description: WiFi hostname for network identification
+          example: "clock-12345"
 
     Timezone:
       type: object
@@ -691,19 +734,21 @@ components:
         speed: 50
         on: true
 
-    TimeConfigUSEast:
+    SystemConfigUSEast:
       summary: US Eastern timezone configuration
       value:
         auto_timezone: false
         timezone: "America/New_York"
         ntp_server: "us.pool.ntp.org"
+        wifi_hostname: "clock-living-room"
 
-    TimeConfigEurope:
+    SystemConfigEurope:
       summary: European timezone configuration
       value:
         auto_timezone: false
         timezone: "Europe/London"
         ntp_server: "europe.pool.ntp.org"
+        wifi_hostname: "clock-kitchen"
 
     FibonacciConfigExample:
       summary: Fibonacci configuration example

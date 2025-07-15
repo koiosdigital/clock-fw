@@ -2,25 +2,27 @@
 
 #include "esp_http_server.h"
 #include <stdint.h>
+#include <stdbool.h>
+#include "nixie.h"
 
-// Nixie configuration structure
-typedef struct {
-    uint8_t brightness;      // 0-100 scale (maps to 20-100% duty cycle inverted)
-    bool military_time;      // true for 24h, false for 12h format
-    bool blinking_dots;      // true to blink separator dots with seconds
-    bool on;                 // true if nixies are currently on
-} nixie_config_t;
+// WebSocket nixie configuration handler
+esp_err_t nixie_websocket_handler(httpd_req_t* req);
 
-// Common nixie configuration handlers
-esp_err_t nixie_config_get_handler(httpd_req_t* req);
-esp_err_t nixie_config_post_handler(httpd_req_t* req);
+// Helper function to broadcast nixie state to all connected clients
+void nixie_broadcast_state(void);
 
 // Helper function to register nixie handlers
 void register_nixie_handlers(httpd_handle_t server);
 
-// Configuration management functions
-void nixie_load_from_nvs(nixie_config_t* config);
-void nixie_save_to_nvs(nixie_config_t* config);
+// Legacy HTTP handlers for backward compatibility
+esp_err_t nixie_config_get_handler(httpd_req_t* req);
+esp_err_t nixie_config_post_handler(httpd_req_t* req);
 
-// Forward declaration - implemented in clock.cpp
-void nixie_load_and_apply_config();
+// NVS functions
+void nixie_load_from_nvs(nixie_config_t* config);
+void nixie_save_to_nvs(const nixie_config_t* config);
+
+// Configuration getters/setters
+nixie_config_t nixie_get_config(void);
+void nixie_set_config(const nixie_config_t* config);
+void nixie_apply_config(const nixie_config_t* config);

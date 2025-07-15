@@ -1,4 +1,4 @@
-#include "clock.h"
+#include "wordclock.h"
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -16,22 +16,27 @@
 #include <esp_wifi.h>
 #include "wifi_provisioning/manager.h"
 #include "protocomm_ble.h"
-
-
-#define NUM_PIXELS 256
+#include "sdkconfig.h"
 
 const char* letters =
 "ITLISOTWENTYRONETWOETENMTHIRTEENFIVEMELEVENIFOURTHREEPNINETEENSUFOURTEENMIDNIGHTSIXTEENDEIGHTEENSEVENTEENOTWELVEHALFELQUARTEROTOPASTRONESATW"
 "OSIXTWELVETFOURAFIVESEVENMEIGHTENINETENTTHREECELEVENINOTHENAFTERNOONMORNINGSATENIGHTEVENINGCANDTCOLDCOOLETWARMURAHOT";
 
+#ifdef CONFIG_BASE_CLOCK_TYPE_WORDCLOCK
+
+#if defined(CONFIG_WORDCLOCK_LED_IS_RGBW) && CONFIG_WORDCLOCK_LED_IS_RGBW
+static bool is_rgbw = true;
+#else
+static bool is_rgbw = false;
+#endif
 
 LEDConfig_t wordclock_led_config = {
-    .pin = (gpio_num_t)4,  // Example GPIO pin
-    .count = NUM_PIXELS,
-    .is_rgbw = false,   // Assuming RGB, not RGBW
+    .pin = (gpio_num_t)CONFIG_WORDCLOCK_LED_DATA_PIN,  // Example GPIO pin
+    .count = 256,
+    .is_rgbw = is_rgbw,   // Assuming RGB, not RGBW
 };
 
-uint8_t bits[NUM_PIXELS] = { 0 };
+uint8_t bits[256] = { 0 };
 char wordclock_words_buffer[128] = { 0 };
 
 bool add_word_to_buffer(const char* word)
@@ -198,7 +203,7 @@ void setTime(int hour, int minute) {
 
 end:
     // Convert the word buffer to bits
-    if (!word_buffer_to_bits(wordclock_words_buffer, letters, bits, NUM_PIXELS)) {
+    if (!word_buffer_to_bits(wordclock_words_buffer, letters, bits, 256)) {
         return;
     }
 
@@ -206,7 +211,7 @@ end:
     led_set_mask(bits);
 }
 
-void clock_task(void* pvParameters) {
+void wordclock_clock_task(void* pvParameter) {
     time_t now;
     struct tm timeinfo;
     int lastHour = -1;
@@ -243,37 +248,11 @@ void clock_task(void* pvParameters) {
     }
 }
 
-void wifi_prov_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-    led_set_color(0, 0, 255, 0); // Solid blue when provisioning connected
-    led_set_effect(LED_SOLID);
-    led_set_brightness(50);
-}
-
-void wifi_prov_started(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-    led_set_color(0, 0, 255, 0); // Blinking blue when provisioning started
-    led_set_effect(LED_BREATHE);
-    led_set_brightness(50);
-}
-
-void wifi_disconnected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-    led_set_color(0, 255, 255, 0); // Blinking teal while waiting for WiFi
-    led_set_effect(LED_BREATHE);
-    led_set_brightness(50);
-}
-
-void wifi_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-    xTaskCreate(clock_task, "clock_task", 4096, NULL, 5, NULL);
-}
-
-void clock_init() {
+void wordclock_clock_init() {
     led_init(wordclock_led_config);
     led_set_effect(LED_BREATHE);  // Start with blinking teal waiting for WiFi
     led_set_color(0, 255, 255, 0);  // Teal color
     led_set_brightness(50);
-
-    // Register event handlers for the LED flow
-    esp_event_handler_register(PROTOCOMM_TRANSPORT_BLE_EVENT, PROTOCOMM_TRANSPORT_BLE_CONNECTED, &wifi_prov_connected, NULL);
-    esp_event_handler_register(WIFI_PROV_EVENT, WIFI_PROV_START, &wifi_prov_started, NULL);
-    esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &wifi_disconnected, NULL);
-    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_connected, NULL);
 }
+
+#endif

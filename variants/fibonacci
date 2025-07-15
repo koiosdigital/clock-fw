@@ -1,4 +1,0 @@
-#
-# Clock configuration
-#
-CONFIG_CLOCK_TYPE=3

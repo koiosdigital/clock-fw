@@ -2,23 +2,13 @@ file(GLOB_RECURSE NESTED_SRC
        **.cpp
 )
 
-list(FILTER NESTED_SRC EXCLUDE REGEX ".*/clock.cpp$")
-list(FILTER NESTED_SRC EXCLUDE REGEX ".*/handlers.cpp$")
-
-#if build variant is "devel", set to "fibonacci"
-if (BUILD_VARIANT STREQUAL "devel")
-    set(BUILD_VARIANT "fibonacci")
-    add_compile_definitions(FIRMWARE_VARIANT="${BUILD_VARIANT}")
-endif()
-
 list(APPEND INCLUDE_DIRS ".")
 list(APPEND INCLUDE_DIRS "internet_time")
 list(APPEND INCLUDE_DIRS "led")
 list(APPEND INCLUDE_DIRS "api")
-list(APPEND INCLUDE_DIRS "${BUILD_VARIANT}")
-
-list(APPEND NESTED_SRC "${CMAKE_CURRENT_SOURCE_DIR}/${BUILD_VARIANT}/clock.cpp")
-list(APPEND NESTED_SRC "${CMAKE_CURRENT_SOURCE_DIR}/${BUILD_VARIANT}/handlers.cpp")
+list(APPEND INCLUDE_DIRS "wordclock")
+list(APPEND INCLUDE_DIRS "nixie")
+#list(APPEND INCLUDE_DIRS "fibonacci")
 
 message(STATUS ${NESTED_SRC})
 

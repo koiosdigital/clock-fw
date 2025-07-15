@@ -29,6 +29,46 @@ static bool blink_state = false;
 uint8_t* led_buffer = nullptr;
 uint8_t* led_mask = nullptr;
 
+// HSV to RGB conversion helper function
+void hsv_to_rgb(uint8_t h, uint8_t s, uint8_t v, uint8_t* r, uint8_t* g, uint8_t* b) {
+    uint8_t region, remainder, p, q, t;
+
+    if (s == 0) {
+        *r = v;
+        *g = v;
+        *b = v;
+        return;
+    }
+
+    region = h / 43;
+    remainder = (h - (region * 43)) * 6;
+
+    p = (v * (255 - s)) >> 8;
+    q = (v * (255 - ((s * remainder) >> 8))) >> 8;
+    t = (v * (255 - ((s * (255 - remainder)) >> 8))) >> 8;
+
+    switch (region) {
+    case 0:
+        *r = v; *g = t; *b = p;
+        break;
+    case 1:
+        *r = q; *g = v; *b = p;
+        break;
+    case 2:
+        *r = p; *g = v; *b = t;
+        break;
+    case 3:
+        *r = p; *g = q; *b = v;
+        break;
+    case 4:
+        *r = t; *g = p; *b = v;
+        break;
+    default:
+        *r = v; *g = p; *b = q;
+        break;
+    }
+}
+
 //Setters
 void led_set_effect(LEDEffect_t effect) {
     current_effect = effect;
@@ -189,8 +229,36 @@ void led_cyclic() {
     }
 }
 
+void led_rainbow() {
+    static uint8_t rainbow_offset = 0;
+    static uint32_t last_update = 0;
+
+    uint32_t changeInterval = 1000 / led_speed;
+    if (xTaskGetTickCount() - last_update > pdMS_TO_TICKS(changeInterval)) {
+        rainbow_offset = (rainbow_offset + 1) % 256;
+        last_update = xTaskGetTickCount();
+    }
+
+    for (int i = 0; i < led_count; i++) {
+        // Calculate hue for this LED position with offset for animation
+        uint8_t hue = (uint8_t)((i * 256 / led_count) + rainbow_offset) % 256;
+
+        // Convert HSV to RGB (H=hue, S=255, V=brightness)
+        uint8_t r, g, b;
+        hsv_to_rgb(hue, 255, led_brightness, &r, &g, &b);
+
+        // Set color (RGB only, no white channel for rainbow)
+        tx_buf_set_color_at(i, r, g, b, 0);
+    }
+}
+
 void led_loop() {
     handle_fading();
+
+    if (!leds_on) {
+        tx_buf_fill_color(0, 0, 0, 0);
+        return;
+    }
 
     switch (current_effect) {
     case LED_OFF:
@@ -209,7 +277,7 @@ void led_loop() {
         led_cyclic();
         break;
     case LED_RAINBOW:
-        // Implement rainbow effect here
+        led_rainbow();
         break;
     case LED_RAW_BUFFER:
         // Raw buffer effect - no processing, direct buffer access
@@ -296,6 +364,14 @@ void led_load_from_nvs(led_persistent_config_t* config) {
     esp_err_t err = nvs_open(LED_NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
     if (err != ESP_OK) {
         ESP_LOGI("LED", "NVS namespace not found, using defaults");
+        config->effect = LED_SOLID;
+        config->r = 100;
+        config->g = 100;
+        config->b = 100;
+        config->w = 100;
+        config->brightness = 100;
+        config->speed = 10;
+        config->on = true;
         return;
     }
 

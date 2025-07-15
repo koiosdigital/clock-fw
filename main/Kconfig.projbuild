@@ -1,8 +1,186 @@
-menu "HW type"
-    config HW_TYPE
-        int "HW_TYPE"
-        default 1
+menu "Base clock type"
+    choice BASE_CLOCK_TYPE_CHOICE
+        prompt "Select clock type"
+        default BASE_CLOCK_TYPE_NIXIE
         help
-            1 = Mothership
-            2 = Rover
+            Choose the type of clock display for your device
+
+        config BASE_CLOCK_TYPE_NIXIE
+            bool "Nixie tube clock"
+            help
+                Traditional Nixie tube display with glowing numbers
+
+        config BASE_CLOCK_TYPE_FIBONACCI
+            bool "Fibonacci clock"
+            help
+                LED-based Fibonacci sequence time display
+
+        config BASE_CLOCK_TYPE_WORDCLOCK
+            bool "Word clock"
+            help
+                LED matrix displaying time as words
+    endchoice
+
+    config BASE_CLOCK_TYPE
+        int
+        default 1 if BASE_CLOCK_TYPE_NIXIE
+        default 2 if BASE_CLOCK_TYPE_FIBONACCI
+        default 3 if BASE_CLOCK_TYPE_WORDCLOCK
+
+    menu "Nixie Configuration"
+        depends on BASE_CLOCK_TYPE_NIXIE
+
+        choice NIXIE_TUBE_COUNT_CHOICE
+            prompt "Number of Nixie tubes"
+            default NIXIE_TUBE_COUNT_4
+            help
+                Select the number of Nixie tubes in your clock
+
+            config NIXIE_TUBE_COUNT_4
+                bool "4 tubes (HH:MM format)"
+                help
+                    Four Nixie tubes showing hours and minutes
+
+            config NIXIE_TUBE_COUNT_6
+                bool "6 tubes (HH:MM:SS format)"
+                help
+                    Six Nixie tubes showing hours, minutes, and seconds
+        endchoice
+
+        config NIXIE_TUBE_COUNT
+            int
+            default 4 if NIXIE_TUBE_COUNT_4
+            default 6 if NIXIE_TUBE_COUNT_6
+
+        config SHIFTREG_SPI_CLK_PIN
+            int "SPI Clock pin"
+            default 18
+            range 0 39
+            help
+                GPIO pin for SPI clock (SCLK) to SHIFTREG
+
+        config SHIFTREG_SPI_MOSI_PIN
+            int "SPI MOSI pin"
+            default 23
+            range 0 39
+            help
+                GPIO pin for SPI MOSI (data) to SHIFTREG
+
+        config SHIFTREG_LATCH_PIN
+            int "Latch output pin"
+            default 5
+            range 0 39
+            help
+                GPIO pin for latch (RCLK/STCP) to SHIFTREG
+
+        choice SHIFTREG_SPI_MODE_CHOICE
+            prompt "SPI mode"
+            default SHIFTREG_SPI_MODE_0
+            help
+                SPI clock polarity and phase configuration
+
+            config SHIFTREG_SPI_MODE_0
+                bool "Mode 0 (CPOL=0, CPHA=0)"
+                help
+                    Clock idle low, data sampled on rising edge
+
+            config SHIFTREG_SPI_MODE_1
+                bool "Mode 1 (CPOL=0, CPHA=1)"
+                help
+                    Clock idle low, data sampled on falling edge
+
+            config SHIFTREG_SPI_MODE_2
+                bool "Mode 2 (CPOL=1, CPHA=0)"
+                help
+                    Clock idle high, data sampled on falling edge
+
+            config SHIFTREG_SPI_MODE_3
+                bool "Mode 3 (CPOL=1, CPHA=1)"
+                help
+                    Clock idle high, data sampled on rising edge
+        endchoice
+
+        config SHIFTREG_SPI_MODE
+            int
+            default 0 if SHIFTREG_SPI_MODE_0
+            default 1 if SHIFTREG_SPI_MODE_1
+            default 2 if SHIFTREG_SPI_MODE_2
+            default 3 if SHIFTREG_SPI_MODE_3
+
+        config SHIFTREG_DATA_INVERSION
+            bool "Invert data bits"
+            default false
+            help
+                Invert the data bits sent to 74SHIFTREG
+
+        config SHIFTREG_LATCH_INVERSION
+            bool "Invert latch signal"
+            default false
+            help
+                Invert the latch signal to 74SHIFTREG
+
+        config NIXIE_BRIGHTNESS_PIN
+            int "Nixie brightness control pin"
+            default 25
+            range 0 39
+            help
+                GPIO pin for PWM brightness control of Nixie tubes
+
+        config NIXIE_BRIGHTNESS_INVERTED
+            bool "Invert brightness signal"
+            default false
+            help
+                Invert the PWM brightness signal (for PNP transistor control)
+
+        config NIXIE_LED_DATA_PIN
+            int "LED strip data pin"
+            default 27
+            range 0 39
+            help
+                GPIO pin for LED strip data (for underglow/ambient lighting)
+
+        config NIXIE_LED_COUNT
+            int "Number of LEDs"
+            depends on NIXIE_TUBE_COUNT_4 || NIXIE_TUBE_COUNT_6
+            default 4 if NIXIE_TUBE_COUNT_4
+            default 6 if NIXIE_TUBE_COUNT_6
+            range 1 60
+            help
+                Number of LEDs in the strip (typically matches tube count for underglow)
+
+        config NIXIE_LED_IS_RGBW
+            bool "LEDs are RGBW type"
+            default false
+            help
+                Enable if using RGBW LEDs (with white channel) instead of RGB
+    endmenu
+
+    menu "Fibonacci Configuration"
+        depends on BASE_CLOCK_TYPE_FIBONACCI
+        
+        config FIBONACCI_LED_DATA_PIN
+            int "LED strip data pin"
+            default 27
+            range 0 39
+            help
+                GPIO pin for LED strip data (for Fibonacci clock display)
+    endmenu
+
+    menu "Word Clock Configuration"
+        depends on BASE_CLOCK_TYPE_WORDCLOCK
+        
+        config WORDCLOCK_LED_DATA_PIN
+            int "LED strip data pin"
+            default 27
+            range 0 39
+            help
+                GPIO pin for LED strip data (for word clock display)
+
+        config WORDCLOCK_LED_IS_RGBW
+            bool "LEDs are RGBW type"
+            default false
+            help
+                Enable if using RGBW LEDs (with white channel) instead of RGB
+    endmenu
+    
 endmenu

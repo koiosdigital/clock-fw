@@ -2,18 +2,67 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "sdkconfig.h"
 
 #include "esp_log.h"
 #include "sdkconfig.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
 #include "esp_event.h"
+#include <esp_wifi.h>
+#include "wifi_provisioning/manager.h"
+#include "protocomm_ble.h"
 
 #include "kd_common.h"
 #include "cJSON.h"
 #include "internet_time.h"
-#include "clock.h"
 #include "api.h"
+#include "led.h"
+
+#ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
+#include "nixie/nixie.h"
+#elif CONFIG_BASE_CLOCK_TYPE_FIBONACCI
+#error "Fibonacci clock type not implemented yet"
+#elif CONFIG_BASE_CLOCK_TYPE_WORDCLOCK
+#include "wordclock/wordclock.h"
+#else
+#error "No base clock type selected"
+#endif
+
+void wifi_prov_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi Provisioning connected");
+    led_set_color(0, 0, 255, 0); // Solid blue when provisioning connected
+    led_set_effect(LED_SOLID);
+}
+
+void wifi_prov_started(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi Provisioning started");
+    led_set_color(0, 0, 255, 0); // Blinking blue when provisioning started
+    led_set_effect(LED_BREATHE);
+}
+
+void wifi_disconnected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi disconnected - waiting for connection");
+    led_set_color(0, 255, 255, 0); // Blinking teal while waiting for WiFi
+    led_set_effect(LED_BREATHE);
+}
+
+void wifi_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    ESP_LOGI("Clock", "WiFi connected - starting time sync");
+    led_set_color(255, 255, 0, 0);  // Cyclic yellow during time sync
+    led_set_effect(LED_CYCLIC);
+
+#ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
+    xTaskCreate(nixie_clock_task, "clock_task", 4096, NULL, 5, NULL);
+#elif CONFIG_BASE_CLOCK_TYPE_FIBONACCI
+#error "Fibonacci clock type not implemented yet"
+#elif CONFIG_BASE_CLOCK_TYPE_WORDCLOCK
+    xTaskCreate(wordclock_clock_task, "clock_task", 4096, NULL, 5, NULL);
+#else
+#error "No base clock type selected"
+#endif
+
+}
 
 extern "C" void app_main(void)
 {
@@ -26,7 +75,19 @@ extern "C" void app_main(void)
 
     api_init();
     time_init();
-    clock_init();
 
-    vTaskSuspend(NULL);
+#ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
+    nixie_clock_init();
+#elif CONFIG_BASE_CLOCK_TYPE_FIBONACCI
+#error "Fibonacci clock type not implemented yet"
+#elif CONFIG_BASE_CLOCK_TYPE_WORDCLOCK
+    wordclock_clock_init();
+#else
+#error "No base clock type selected"
+#endif
+
+    esp_event_handler_register(PROTOCOMM_TRANSPORT_BLE_EVENT, PROTOCOMM_TRANSPORT_BLE_CONNECTED, &wifi_prov_connected, NULL);
+    esp_event_handler_register(WIFI_PROV_EVENT, WIFI_PROV_START, &wifi_prov_started, NULL);
+    esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &wifi_disconnected, NULL);
+    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_connected, NULL);
 }

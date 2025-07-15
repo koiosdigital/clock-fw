@@ -3,43 +3,48 @@
 #include "mdns.h"
 #include "esp_http_server.h"
 #include "kd_common.h"
-#include "handlers.h"
 #include "cJSON.h"
 #include "internet_time.h"
 #include "embedded_tz_db.h"
 #include <esp_app_desc.h>
 #include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 /* Empty handle to esp_http_server */
 httpd_handle_t kd_server = NULL;
-
-// Helper function to set CORS headers
-void set_cors_headers(httpd_req_t* req) {
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
-    httpd_resp_set_hdr(req, "Access-Control-Max-Age", "86400");
-}
 
 httpd_handle_t get_httpd_handle() {
     return kd_server;
 }
 
+//subtype
+#ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
+const char* subtype = "nixie";
+#elif CONFIG_BASE_CLOCK_TYPE_FIBONACCI
+const char* subtype = "fibonacci";
+#elif CONFIG_BASE_CLOCK_TYPE_WORDCLOCK
+const char* subtype = "wordclock";
+#else
+#error "No base clock type selected"
+#endif
+
 void init_mdns() {
     mdns_init();
-    const char* hostname = kd_common_get_device_name();
+    const char* hostname = kd_common_get_wifi_hostname();
     mdns_hostname_set(hostname);
 
     //esp_app_desc
     const esp_app_desc_t* app_desc = esp_app_get_description();
 
-    mdns_txt_item_t serviceTxtData[3] = {
+    mdns_txt_item_t serviceTxtData[4] = {
         {"model", FIRMWARE_VARIANT},
         {"type", "clock"},
-        {"version", app_desc->version}
+        {"subtype", subtype},
+        { "version", app_desc->version }
     };
 
-    ESP_ERROR_CHECK(mdns_service_add(NULL, "_koiosdigital", "_tcp", 80, serviceTxtData, 3));
+    ESP_ERROR_CHECK(mdns_service_add(NULL, "_koiosdigital", "_tcp", 80, serviceTxtData, 4));
 }
 
 void server_init() {
@@ -51,22 +56,13 @@ void server_init() {
 }
 
 esp_err_t root_handler(httpd_req_t* req) {
-    // Set CORS headers
-    set_cors_headers(req);
-
-    // Handle root requests
     const char* response = "Welcome to the KD Clock API!";
     httpd_resp_send(req, response, strlen(response));
     return ESP_OK;
 }
 
 esp_err_t about_handler(httpd_req_t* req) {
-    // Set CORS headers
-    set_cors_headers(req);
-
-    // Get app description and hostname
     const esp_app_desc_t* app_desc = esp_app_get_description();
-    const char* hostname = kd_common_get_device_name();
 
     // Create JSON response
     cJSON* json = cJSON_CreateObject();
@@ -75,13 +71,15 @@ esp_err_t about_handler(httpd_req_t* req) {
         return ESP_FAIL;
     }
 
-    cJSON* variant = cJSON_CreateString(FIRMWARE_VARIANT);
+    cJSON* model = cJSON_CreateString(FIRMWARE_VARIANT);
+    cJSON* type = cJSON_CreateString("clock");
+    cJSON* subtype_json = cJSON_CreateString(subtype);
     cJSON* version = cJSON_CreateString(app_desc->version);
-    cJSON* hostname_json = cJSON_CreateString(hostname);
 
-    cJSON_AddItemToObject(json, "firmware_variant", variant);
+    cJSON_AddItemToObject(json, "model", model);
+    cJSON_AddItemToObject(json, "type", type);
+    cJSON_AddItemToObject(json, "subtype", subtype_json);
     cJSON_AddItemToObject(json, "version", version);
-    cJSON_AddItemToObject(json, "hostname", hostname_json);
 
     char* json_string = cJSON_Print(json);
     if (json_string == NULL) {
@@ -99,16 +97,14 @@ esp_err_t about_handler(httpd_req_t* req) {
     return ESP_OK;
 }
 
-esp_err_t time_config_get_handler(httpd_req_t* req) {
-    // Set CORS headers
-    set_cors_headers(req);
-
-    // Get current time configuration
+esp_err_t system_config_get_handler(httpd_req_t* req) {
     time_config_t config = time_get_config();
+    char* wifi_hostname = kd_common_get_wifi_hostname();
 
     // Create JSON response
     cJSON* json = cJSON_CreateObject();
     if (json == NULL) {
+        if (wifi_hostname) free(wifi_hostname);
         httpd_resp_send_500(req);
         return ESP_FAIL;
     }
@@ -116,14 +112,17 @@ esp_err_t time_config_get_handler(httpd_req_t* req) {
     cJSON* auto_timezone = cJSON_CreateBool(config.auto_timezone);
     cJSON* timezone = cJSON_CreateString(config.timezone);
     cJSON* ntp_server = cJSON_CreateString(config.ntp_server);
+    cJSON* wifi_hostname_json = cJSON_CreateString(wifi_hostname ? wifi_hostname : "");
 
     cJSON_AddItemToObject(json, "auto_timezone", auto_timezone);
     cJSON_AddItemToObject(json, "timezone", timezone);
     cJSON_AddItemToObject(json, "ntp_server", ntp_server);
+    cJSON_AddItemToObject(json, "wifi_hostname", wifi_hostname_json);
 
     char* json_string = cJSON_Print(json);
     if (json_string == NULL) {
         cJSON_Delete(json);
+        if (wifi_hostname) free(wifi_hostname);
         httpd_resp_send_500(req);
         return ESP_FAIL;
     }
@@ -137,10 +136,7 @@ esp_err_t time_config_get_handler(httpd_req_t* req) {
     return ESP_OK;
 }
 
-esp_err_t time_config_post_handler(httpd_req_t* req) {
-    // Set CORS headers
-    set_cors_headers(req);
-
+esp_err_t system_config_post_handler(httpd_req_t* req) {
     char content[512];
     int ret = httpd_req_recv(req, content, sizeof(content) - 1);
     if (ret <= 0) {
@@ -168,6 +164,7 @@ esp_err_t time_config_post_handler(httpd_req_t* req) {
     cJSON* auto_timezone_json = cJSON_GetObjectItem(json, "auto_timezone");
     cJSON* timezone_json = cJSON_GetObjectItem(json, "timezone");
     cJSON* ntp_server_json = cJSON_GetObjectItem(json, "ntp_server");
+    cJSON* wifi_hostname_json = cJSON_GetObjectItem(json, "wifi_hostname");
 
     // Validate auto_timezone if present
     if (cJSON_IsBool(auto_timezone_json)) {
@@ -192,24 +189,48 @@ esp_err_t time_config_post_handler(httpd_req_t* req) {
         }
     }
 
+    // Validate wifi_hostname if present
+    bool wifi_hostname_updated = false;
+    if (cJSON_IsString(wifi_hostname_json)) {
+        const char* hostname_str = cJSON_GetStringValue(wifi_hostname_json);
+        if (hostname_str && strlen(hostname_str) > 0 && strlen(hostname_str) <= 63) {
+            kd_common_set_wifi_hostname(hostname_str);
+            wifi_hostname_updated = true;
+        }
+    }
+
     cJSON_Delete(json);
 
     // Apply configuration
     time_set_config(&new_config);
 
-    // Return success response
-    const char* response = "{\"status\":\"success\",\"message\":\"Time configuration updated. Restart required to apply changes.\"}";
+    // Create dynamic response message
+    cJSON* response_json = cJSON_CreateObject();
+    cJSON* status = cJSON_CreateString("success");
+    cJSON* message = cJSON_CreateString(wifi_hostname_updated ?
+        "System configuration updated. WiFi hostname change requires restart to take effect." :
+        "System configuration updated. Restart required to apply changes.");
+
+    cJSON_AddItemToObject(response_json, "status", status);
+    cJSON_AddItemToObject(response_json, "message", message);
+
+    char* response_string = cJSON_Print(response_json);
+    if (response_string == NULL) {
+        cJSON_Delete(response_json);
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, response, strlen(response));
+    httpd_resp_send(req, response_string, strlen(response_string));
+
+    free(response_string);
+    cJSON_Delete(response_json);
 
     return ESP_OK;
 }
 
 esp_err_t time_zones_handler(httpd_req_t* req) {
-    // Set CORS headers
-    set_cors_headers(req);
-
-    // Get all available timezones
     const embeddedTz_t* zones = tz_db_get_all_zones();
 
     // Set content type and start chunked response
@@ -301,37 +322,38 @@ void api_init() {
         .handler = root_handler,
         .user_ctx = NULL
     };
+    httpd_register_uri_handler(server, &root_uri);
+
     httpd_uri_t about_uri = {
         .uri = "/api/system/about",
         .method = HTTP_GET,
         .handler = about_handler,
         .user_ctx = NULL
     };
-    httpd_uri_t time_config_get_uri = {
-        .uri = "/api/time/config",
+    httpd_register_uri_handler(server, &about_uri);
+
+    httpd_uri_t system_config_get_uri = {
+        .uri = "/api/system/config",
         .method = HTTP_GET,
-        .handler = time_config_get_handler,
+        .handler = system_config_get_handler,
         .user_ctx = NULL
     };
-    httpd_uri_t time_config_post_uri = {
-        .uri = "/api/time/config",
+    httpd_register_uri_handler(server, &system_config_get_uri);
+
+    httpd_uri_t system_config_post_uri = {
+        .uri = "/api/system/config",
         .method = HTTP_POST,
-        .handler = time_config_post_handler,
+        .handler = system_config_post_handler,
         .user_ctx = NULL
     };
+    httpd_register_uri_handler(server, &system_config_post_uri);
+
     httpd_uri_t time_zones_uri = {
         .uri = "/api/time/zonedb",
         .method = HTTP_GET,
         .handler = time_zones_handler,
         .user_ctx = NULL
-    };
+    };    httpd_register_uri_handler(server, &time_zones_uri);
 
-    httpd_register_uri_handler(server, &root_uri);
-    httpd_register_uri_handler(server, &about_uri);
-    httpd_register_uri_handler(server, &time_config_get_uri);
-    httpd_register_uri_handler(server, &time_config_post_uri);
-    httpd_register_uri_handler(server, &time_zones_uri);
-
-    // Register API handlers
-    register_api_handlers(server);
+    register_led_handlers(server);
 }

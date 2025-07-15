@@ -150,6 +150,15 @@ void time_apply_config(void) {
                 if (tz_json != NULL && cJSON_IsString(tz_json)) {
                     tzname = cJSON_GetStringValue(tz_json);
                     ESP_LOGI(TAG, "API timezone: %s", tzname);
+
+                    // Update the stored timezone with the auto-fetched value
+                    strncpy(time_config.timezone, tzname, sizeof(time_config.timezone) - 1);
+                    time_config.timezone[sizeof(time_config.timezone) - 1] = '\0';
+
+                    // Save the updated config to NVS so API returns the actual timezone
+                    time_save_config_to_nvs();
+                    ESP_LOGI(TAG, "Saved auto-fetched timezone to NVS: %s", tzname);
+
                     posixTZ = tz_db_get_posix_str(tzname);
                 }
                 cJSON_Delete(root);
