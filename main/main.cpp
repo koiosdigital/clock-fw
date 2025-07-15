@@ -22,7 +22,7 @@
 #ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
 #include "nixie/nixie.h"
 #elif CONFIG_BASE_CLOCK_TYPE_FIBONACCI
-#error "Fibonacci clock type not implemented yet"
+#include "fibonacci/fibonacci.h"
 #elif CONFIG_BASE_CLOCK_TYPE_WORDCLOCK
 #include "wordclock/wordclock.h"
 #else
@@ -55,7 +55,7 @@ void wifi_connected(void* arg, esp_event_base_t event_base, int32_t event_id, vo
 #ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
     xTaskCreate(nixie_clock_task, "clock_task", 4096, NULL, 5, NULL);
 #elif CONFIG_BASE_CLOCK_TYPE_FIBONACCI
-#error "Fibonacci clock type not implemented yet"
+    xTaskCreate(fibonacci_clock_task, "clock_task", 4096, NULL, 5, NULL);
 #elif CONFIG_BASE_CLOCK_TYPE_WORDCLOCK
     xTaskCreate(wordclock_clock_task, "clock_task", 4096, NULL, 5, NULL);
 #else
@@ -79,7 +79,7 @@ extern "C" void app_main(void)
 #ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
     nixie_clock_init();
 #elif CONFIG_BASE_CLOCK_TYPE_FIBONACCI
-#error "Fibonacci clock type not implemented yet"
+    fibonacci_clock_init();
 #elif CONFIG_BASE_CLOCK_TYPE_WORDCLOCK
     wordclock_clock_init();
 #else

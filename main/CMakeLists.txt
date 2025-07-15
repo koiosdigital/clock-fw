@@ -8,7 +8,7 @@ list(APPEND INCLUDE_DIRS "led")
 list(APPEND INCLUDE_DIRS "api")
 list(APPEND INCLUDE_DIRS "wordclock")
 list(APPEND INCLUDE_DIRS "nixie")
-#list(APPEND INCLUDE_DIRS "fibonacci")
+list(APPEND INCLUDE_DIRS "fibonacci")
 
 message(STATUS ${NESTED_SRC})
 

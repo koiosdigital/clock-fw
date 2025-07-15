@@ -11,11 +11,7 @@
 #include <time.h>
 #include <string.h>
 #include "internet_time.h"
-#include <esp_event.h>
 
-#include <esp_wifi.h>
-#include "wifi_provisioning/manager.h"
-#include "protocomm_ble.h"
 #include "sdkconfig.h"
 
 const char* letters =
