@@ -207,12 +207,12 @@ paths:
         "400":
           description: WebSocket upgrade failed
 
-  /api/fibonacci/config:
+  /api/fibonacci:
     get:
       tags:
         - Fibonacci
       summary: Get Fibonacci clock configuration
-      description: Returns current configuration for the Fibonacci clock display (fibonacci variant only)
+      description: Returns current configuration for the Fibonacci clock display including available themes (fibonacci variant only)
       responses:
         "200":
           description: Fibonacci clock configuration
@@ -248,23 +248,45 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/fibonacci/ws:
+    get:
+      tags:
+        - Fibonacci
+      summary: Fibonacci WebSocket endpoint
+      description: |
+        WebSocket endpoint for real-time Fibonacci clock configuration updates.
+        Clients receive the current state immediately upon connection and live updates
+        when configuration changes occur.
+      responses:
+        "101":
+          description: WebSocket connection established
+        "400":
+          description: Invalid WebSocket request
+      x-websocket:
+        description: |
+          Real-time Fibonacci clock control via WebSocket
+
+          **Connection:**
+          ```javascript
+          const ws = new WebSocket('ws://device-ip/api/fibonacci/ws');
+          ```
+
+          **Received on connect:** Current configuration JSON
+          **Send:** Configuration update JSON (same format as POST /api/fibonacci)
+          **Receive:** Updated configuration JSON after any change
+
   /api/fibonacci/themes:
     get:
       tags:
         - Fibonacci
-      summary: Get available Fibonacci themes
-      description: Returns all available color themes for the Fibonacci clock (fibonacci variant only)
+      summary: Get available Fibonacci themes (DEPRECATED)
+      description: |
+        **DEPRECATED:** This endpoint has been removed. Theme information is now included 
+        in the main `/api/fibonacci` GET response under the `themes` array.
+      deprecated: true
       responses:
-        "200":
-          description: List of available themes
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/FibonacciTheme"
-        "500":
-          $ref: "#/components/responses/InternalServerError"
+        "404":
+          description: Endpoint no longer available
 
   /api/nixie:
     get:
@@ -307,27 +329,60 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/nixie/ws:
+    get:
+      tags:
+        - Nixie
+      summary: Nixie WebSocket endpoint
+      description: |
+        WebSocket endpoint for real-time Nixie tube configuration updates.
+        Clients receive the current state immediately upon connection and live updates
+        when configuration changes occur.
+      responses:
+        "101":
+          description: WebSocket connection established
+        "400":
+          description: Invalid WebSocket request
+      x-websocket:
+        description: |
+          Real-time Nixie tube control via WebSocket
+
+          **Connection:**
+          ```javascript
+          const ws = new WebSocket('ws://device-ip/api/nixie/ws');
+          ```
+
+          **Received on connect:** Current configuration JSON
+          **Send:** Configuration update JSON (same format as POST /api/nixie)
+          **Receive:** Updated configuration JSON after any change
+
 components:
   schemas:
     SystemInfo:
       type: object
       required:
-        - firmware_variant
+        - model
+        - type
+        - subtype
         - version
-        - hostname
       properties:
-        firmware_variant:
+        type:
+          type: string
+          enum: [clock]
+          description: Clock
+          example: "clock"
+        subtype:
           type: string
           enum: [fibonacci, nixie, wordclock]
-          description: The specific firmware variant running on this device
+          description: The specific clock variant
           example: "fibonacci"
         version:
           type: string
           description: Firmware version string
           example: "1.0.0"
-        hostname:
+        model:
           type: string
-          description: Device hostname
+          description: Device model
           example: "kd-clock-001"
 
     SystemConfig:
@@ -494,6 +549,7 @@ components:
         - brightness
         - theme_id
         - on
+        - themes
       properties:
         brightness:
           type: integer
@@ -510,6 +566,11 @@ components:
           type: boolean
           description: Whether the Fibonacci display is currently on
           example: true
+        themes:
+          type: array
+          description: Array of all available color themes
+          items:
+            $ref: "#/components/schemas/FibonacciTheme"
 
     FibonacciConfigRequest:
       type: object
@@ -546,19 +607,22 @@ components:
         name:
           type: string
           description: Human-readable theme name
-          example: "Classic"
+          example: "RGB"
         hour_color:
-          type: integer
-          description: RGB color value for hour indication (24-bit)
-          example: 16711680
+          type: string
+          pattern: "^#[0-9A-F]{6}$"
+          description: RGB color value for hour indication (hex format)
+          example: "#FF0A0A"
         minute_color:
-          type: integer
-          description: RGB color value for minute indication (24-bit)
-          example: 65280
+          type: string
+          pattern: "^#[0-9A-F]{6}$"
+          description: RGB color value for minute indication (hex format)
+          example: "#0AFF0A"
         both_color:
-          type: integer
-          description: RGB color value when displaying both hour and minute (24-bit)
-          example: 255
+          type: string
+          pattern: "^#[0-9A-F]{6}$"
+          description: RGB color value when displaying both hour and minute (hex format)
+          example: "#0A0AFF"
 
     NixieConfig:
       type: object
