@@ -94,12 +94,14 @@ static cJSON* create_led_state_json(void) {
     // Map effect enum to string
     const char* effect_str = "unknown";
     switch (config.effect) {
-    case LED_OFF: effect_str = "off"; break;
     case LED_SOLID: effect_str = "solid"; break;
     case LED_BLINK: effect_str = "blink"; break;
     case LED_BREATHE: effect_str = "breathe"; break;
     case LED_CYCLIC: effect_str = "cyclic"; break;
     case LED_RAINBOW: effect_str = "rainbow"; break;
+    case LED_COLOR_WIPE: effect_str = "color_wipe"; break;
+    case LED_THEATER_CHASE: effect_str = "theater_chase"; break;
+    case LED_SPARKLE: effect_str = "sparkle"; break;
     default: break;
     }
 
@@ -147,14 +149,16 @@ static esp_err_t apply_led_config_from_json(cJSON* json) {
     // Validate mode
     if (cJSON_IsString(mode_json)) {
         const char* mode_str = cJSON_GetStringValue(mode_json);
-        LEDEffect_t new_effect = LED_OFF;
+        LEDEffect_t new_effect = LED_SOLID;
 
-        if (strcmp(mode_str, "off") == 0) new_effect = LED_OFF;
-        else if (strcmp(mode_str, "solid") == 0) new_effect = LED_SOLID;
+        if (strcmp(mode_str, "solid") == 0) new_effect = LED_SOLID;
         else if (strcmp(mode_str, "blink") == 0) new_effect = LED_BLINK;
         else if (strcmp(mode_str, "breathe") == 0) new_effect = LED_BREATHE;
         else if (strcmp(mode_str, "cyclic") == 0) new_effect = LED_CYCLIC;
         else if (strcmp(mode_str, "rainbow") == 0) new_effect = LED_RAINBOW;
+        else if (strcmp(mode_str, "color_wipe") == 0) new_effect = LED_COLOR_WIPE;
+        else if (strcmp(mode_str, "theater_chase") == 0) new_effect = LED_THEATER_CHASE;
+        else if (strcmp(mode_str, "sparkle") == 0) new_effect = LED_SPARKLE;
         else {
             ESP_LOGW(TAG, "Invalid mode: %s", mode_str);
             return ESP_FAIL;

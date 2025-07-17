@@ -209,12 +209,7 @@ esp_err_t system_config_post_handler(httpd_req_t* req) {
     // Create dynamic response message
     cJSON* response_json = cJSON_CreateObject();
     cJSON* status = cJSON_CreateString("success");
-    cJSON* message = cJSON_CreateString(wifi_hostname_updated ?
-        "System configuration updated. WiFi hostname change requires restart to take effect." :
-        "System configuration updated. Restart required to apply changes.");
-
     cJSON_AddItemToObject(response_json, "status", status);
-    cJSON_AddItemToObject(response_json, "message", message);
 
     char* response_string = cJSON_Print(response_json);
     if (response_string == NULL) {
@@ -347,7 +342,7 @@ void api_init() {
     httpd_handle_t server = get_httpd_handle();
 
     httpd_uri_t about_uri = {
-        .uri = "/api/system/about",
+        .uri = "/api/about",
         .method = HTTP_GET,
         .handler = about_handler,
         .user_ctx = NULL

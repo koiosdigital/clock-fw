@@ -8,13 +8,14 @@
 #include "esp_log.h"
 #include "driver/rmt_tx.h"
 #include "led_strip_encoder.h"
+#include "esp_random.h"
 
 #define LED_NVS_NAMESPACE "led_cfg"
 
 static uint16_t led_count = 0;
 static bool is_rgbw = false;
 
-LEDEffect_t current_effect = LED_OFF;
+LEDEffect_t current_effect = LED_SOLID;
 static uint8_t led_speed = 10;
 static uint8_t led_brightness = 255;
 static uint8_t led_color[4] = { 0, 0, 0, 0 };
@@ -173,7 +174,7 @@ void tx_buf_set_color_at(int index, uint8_t r, uint8_t g, uint8_t b, uint8_t w) 
 }
 
 void led_blink() {
-    uint32_t changeInterval = 1000 / led_speed;
+    uint32_t changeInterval = 1000 * (11 - led_speed); // Inverse speed logic
     if (xTaskGetTickCount() - blink_changed_at > pdMS_TO_TICKS(changeInterval)) {
         blink_state = !blink_state;
         if (blink_state) {
@@ -190,22 +191,28 @@ void led_breathe() {
     static uint8_t brightness = 0;
     static bool increasing = true;
 
-    if (increasing) {
-        brightness += 5;
-        if (brightness >= led_brightness) {
-            brightness = led_brightness;
-            increasing = false;
-        }
-    }
-    else {
-        brightness -= 5;
-        if (brightness <= 0) {
-            brightness = 0;
-            increasing = true;
-        }
-    }
+    uint32_t changeInterval = 100 * (11 - led_speed); // Inverse speed logic
+    static uint32_t last_update = 0;
 
-    tx_buf_fill_color(led_color[0] * brightness / 255, led_color[1] * brightness / 255, led_color[2] * brightness / 255, led_color[3] * brightness / 255);
+    if (xTaskGetTickCount() - last_update > pdMS_TO_TICKS(changeInterval)) {
+        if (increasing) {
+            brightness += 5;
+            if (brightness >= led_brightness) {
+                brightness = led_brightness;
+                increasing = false;
+            }
+        }
+        else {
+            brightness -= 5;
+            if (brightness <= 0) {
+                brightness = 0;
+                increasing = true;
+            }
+        }
+
+        tx_buf_fill_color(led_color[0] * brightness / 255, led_color[1] * brightness / 255, led_color[2] * brightness / 255, led_color[3] * brightness / 255);
+        last_update = xTaskGetTickCount();
+    }
 }
 
 //LEDs are arranged in a circle, loading spinner effect
@@ -214,7 +221,7 @@ void led_cyclic() {
     static uint32_t last_update = 0;
     static int trail_size = 5;
 
-    uint32_t changeInterval = 1000 / led_speed;
+    uint32_t changeInterval = 100 * (11 - led_speed); // Inverse speed logic
     if (xTaskGetTickCount() - last_update > pdMS_TO_TICKS(changeInterval)) {
         offset = (offset + 1) % led_count;
         for (int i = 0; i < led_count; i++) {
@@ -233,7 +240,7 @@ void led_rainbow() {
     static uint8_t rainbow_offset = 0;
     static uint32_t last_update = 0;
 
-    uint32_t changeInterval = 1000 / led_speed;
+    uint32_t changeInterval = 100 * (11 - led_speed); // Inverse speed logic
     if (xTaskGetTickCount() - last_update > pdMS_TO_TICKS(changeInterval)) {
         rainbow_offset = (rainbow_offset + 1) % 256;
         last_update = xTaskGetTickCount();
@@ -252,6 +259,60 @@ void led_rainbow() {
     }
 }
 
+void led_color_wipe() {
+    static int current_led = 0;
+    static uint32_t last_update = 0;
+
+    uint32_t changeInterval = 100 * (11 - led_speed); // Inverse speed logic
+    if (xTaskGetTickCount() - last_update > pdMS_TO_TICKS(changeInterval)) {
+        if (current_led < led_count) {
+            tx_buf_set_color_at(current_led, led_color[0], led_color[1], led_color[2], led_color[3]);
+            current_led++;
+        }
+        else {
+            current_led = 0;
+            tx_buf_fill_color(0, 0, 0, 0); // Clear all LEDs before restarting
+        }
+        last_update = xTaskGetTickCount();
+    }
+}
+
+void led_theater_chase() {
+    static int offset = 0;
+    static uint32_t last_update = 0;
+
+    uint32_t changeInterval = 100 * (11 - led_speed); // Inverse speed logic
+    if (xTaskGetTickCount() - last_update > pdMS_TO_TICKS(changeInterval)) {
+        for (int i = 0; i < led_count; i++) {
+            if ((i + offset) % 3 == 0) {
+                tx_buf_set_color_at(i, led_color[0], led_color[1], led_color[2], led_color[3]);
+            }
+            else {
+                tx_buf_set_color_at(i, 0, 0, 0, 0);
+            }
+        }
+        offset = (offset + 1) % 3;
+        last_update = xTaskGetTickCount();
+    }
+}
+
+void led_sparkle() {
+    static uint32_t last_update = 0;
+
+    uint32_t changeInterval = 50 * (11 - led_speed); // Inverse speed logic
+    if (xTaskGetTickCount() - last_update > pdMS_TO_TICKS(changeInterval)) {
+        for (int i = 0; i < led_count; i++) {
+            if (esp_random() % 10 == 0) { // Randomly sparkle some LEDs
+                tx_buf_set_color_at(i, led_color[0], led_color[1], led_color[2], led_color[3]);
+            }
+            else {
+                tx_buf_set_color_at(i, 0, 0, 0, 0);
+            }
+        }
+        last_update = xTaskGetTickCount();
+    }
+}
+
 void led_loop() {
     handle_fading();
 
@@ -261,9 +322,6 @@ void led_loop() {
     }
 
     switch (current_effect) {
-    case LED_OFF:
-        tx_buf_fill_color(0, 0, 0, 0);
-        break;
     case LED_SOLID:
         tx_buf_fill_color(led_color[0] * led_brightness / 255, led_color[1] * led_brightness / 255, led_color[2] * led_brightness / 255, led_color[3] * led_brightness / 255);
         break;
@@ -279,8 +337,16 @@ void led_loop() {
     case LED_RAINBOW:
         led_rainbow();
         break;
-    case LED_RAW_BUFFER:
-        // Raw buffer effect - no processing, direct buffer access
+    case LED_COLOR_WIPE:
+        led_color_wipe();
+        break;
+    case LED_THEATER_CHASE:
+        led_theater_chase();
+        break;
+    case LED_SPARKLE:
+        led_sparkle();
+        break;
+    default:
         break;
     }
 }

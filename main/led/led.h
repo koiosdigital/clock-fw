@@ -4,13 +4,15 @@
 #include "soc/gpio_num.h"
 
 typedef enum LEDEffect_t {
-    LED_OFF = 0,
     LED_SOLID, //or current buffer
     LED_BLINK,
     LED_BREATHE,
     LED_CYCLIC,
     LED_RAINBOW,
     LED_RAW_BUFFER, //raw buffer effect - internal use only
+    LED_COLOR_WIPE,
+    LED_THEATER_CHASE,
+    LED_SPARKLE,
 } LEDEffect_t;
 
 typedef struct LEDConfig_t {

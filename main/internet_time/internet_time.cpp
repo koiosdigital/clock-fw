@@ -77,6 +77,7 @@ void time_set_config(const time_config_t* config) {
 
     time_config = *config;
     time_save_config_to_nvs();
+    time_apply_config();
 }
 
 void time_load_config_from_nvs(void) {
