@@ -11,7 +11,7 @@ set(DOWNLOAD_DIR "${CMAKE_CURRENT_BINARY_DIR}/downloads")
 set(INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/include")
 set(STATIC_FILES_PATH "${INCLUDE_DIR}/${STATIC_FILES_HEADER}")
 
-# Create directories
+# Create directories early - this is safe in early expansion
 file(MAKE_DIRECTORY ${DOWNLOAD_DIR})
 file(MAKE_DIRECTORY ${INCLUDE_DIR})
 
@@ -50,37 +50,7 @@ function(get_latest_release_tag REPO_NAME OUTPUT_VAR)
     endif()
 endfunction()
 
-# Register the component
-idf_component_register(
-    INCLUDE_DIRS ${INCLUDE_DIR}
-    REQUIRES esp_http_server
-)
-
-if(NOT CMAKE_BUILD_EARLY_EXPANSION)
-
-# Get the latest release tag
-get_latest_release_tag(${GITHUB_REPO} LATEST_TAG)
-
-# Download URL for the static_files.h
-set(DOWNLOAD_URL "https://github.com/${GITHUB_REPO}/releases/download/${LATEST_TAG}/${STATIC_FILES_HEADER}")
-
-# Custom command to download the static_files.h
-add_custom_command(
-    OUTPUT ${STATIC_FILES_PATH}
-    COMMAND curl -L -f -o ${STATIC_FILES_PATH} ${DOWNLOAD_URL}
-    COMMENT "Downloading ${STATIC_FILES_HEADER} from ${GITHUB_REPO} (${LATEST_TAG})"
-    VERBATIM
-)
-
-# Create a custom target to ensure download happens
-add_custom_target(download_static_files
-    DEPENDS ${STATIC_FILES_PATH}
-)
-
-# Add dependency to ensure download happens before component is built
-add_dependencies(${COMPONENT_LIB} download_static_files)
-
-# Add a fallback static_files.h if download fails
+# Fallback content for static_files.h
 set(FALLBACK_CONTENT "#pragma once
 // Fallback static_files.h when download fails
 namespace static_files {
@@ -96,21 +66,75 @@ namespace static_files {
 }
 ")
 
-# Create fallback file if the downloaded file doesn't exist
-add_custom_command(
-    TARGET download_static_files
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E echo "Checking if ${STATIC_FILES_PATH} exists..."
-    COMMAND test -f ${STATIC_FILES_PATH} || echo "${FALLBACK_CONTENT}" > ${STATIC_FILES_PATH}
-    COMMENT "Creating fallback static_files.h if download failed"
-    VERBATIM
+# Always create a basic fallback file first - this is safe in early expansion
+if(NOT EXISTS ${STATIC_FILES_PATH})
+    file(WRITE ${STATIC_FILES_PATH} "${FALLBACK_CONTENT}")
+    message(STATUS "Created initial fallback static_files.h")
+endif()
+
+# Register the component early with basic configuration
+# ESP-IDF needs this to happen before the expansion boundary
+idf_component_register(
+    INCLUDE_DIRS ${INCLUDE_DIR}
+    REQUIRES esp_http_server
 )
 
-# Print status information
-message(STATUS "Clock-app component configured:")
-message(STATUS "  Repository: ${GITHUB_REPO}")
-message(STATUS "  Target file: ${STATIC_FILES_HEADER}")
-message(STATUS "  Download URL: ${DOWNLOAD_URL}")
-message(STATUS "  Local path: ${STATIC_FILES_PATH}")
+# ESP-IDF early expansion boundary - everything after this only runs during actual build
+if(NOT CMAKE_BUILD_EARLY_EXPANSION)
 
-endif()
+    message(STATUS "Processing clock-app component download logic...")
+
+    # Get the latest release tag
+    get_latest_release_tag(${GITHUB_REPO} LATEST_TAG)
+
+    # Download URL for the static_files.h
+    if("${LATEST_TAG}" STREQUAL "main")
+        # Use raw GitHub URL for main branch
+        set(DOWNLOAD_URL "https://raw.githubusercontent.com/${GITHUB_REPO}/main/${STATIC_FILES_HEADER}")
+    else()
+        # Use release download URL
+        set(DOWNLOAD_URL "https://github.com/${GITHUB_REPO}/releases/download/${LATEST_TAG}/${STATIC_FILES_HEADER}")
+    endif()
+
+    # Try to download the file during actual build configuration
+    execute_process(
+        COMMAND curl -L -f -o ${STATIC_FILES_PATH} ${DOWNLOAD_URL}
+        RESULT_VARIABLE DOWNLOAD_RESULT
+        OUTPUT_QUIET
+        ERROR_QUIET
+    )
+
+    # Check if download was successful and file has content
+    if(DOWNLOAD_RESULT EQUAL 0 AND EXISTS ${STATIC_FILES_PATH})
+        file(SIZE ${STATIC_FILES_PATH} FILE_SIZE)
+        if(FILE_SIZE GREATER 100)  # Reasonable minimum size check
+            message(STATUS "Successfully downloaded ${STATIC_FILES_HEADER} from ${GITHUB_REPO} (${LATEST_TAG})")
+            file(READ ${STATIC_FILES_PATH} FILE_CONTENT LIMIT 200)
+            if(FILE_CONTENT MATCHES "namespace static_files")
+                message(STATUS "Downloaded file appears to be valid static_files.h")
+            else()
+                message(WARNING "Downloaded file may not be valid static_files.h, keeping fallback")
+                file(WRITE ${STATIC_FILES_PATH} "${FALLBACK_CONTENT}")
+            endif()
+        else()
+            message(WARNING "Downloaded file is too small, using fallback")
+            file(WRITE ${STATIC_FILES_PATH} "${FALLBACK_CONTENT}")
+        endif()
+    else()
+        message(WARNING "Failed to download ${STATIC_FILES_HEADER} from ${DOWNLOAD_URL}, keeping fallback")
+    endif()
+
+    # Print detailed status information
+    message(STATUS "Clock-app component configured:")
+    message(STATUS "  Repository: ${GITHUB_REPO}")
+    message(STATUS "  Target file: ${STATIC_FILES_HEADER}")
+    message(STATUS "  Download URL: ${DOWNLOAD_URL}")
+    message(STATUS "  Local path: ${STATIC_FILES_PATH}")
+    if(EXISTS ${STATIC_FILES_PATH})
+        file(SIZE ${STATIC_FILES_PATH} FINAL_FILE_SIZE)
+        message(STATUS "  File exists: YES (${FINAL_FILE_SIZE} bytes)")
+    else()
+        message(STATUS "  File exists: NO")
+    endif()
+
+endif() # CMAKE_BUILD_EARLY_EXPANSION
