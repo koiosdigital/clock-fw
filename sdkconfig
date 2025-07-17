@@ -2388,6 +2388,13 @@ CONFIG_WIFI_PROV_STA_ALL_CHANNEL_SCAN=y
 # end of Wi-Fi Provisioning Manager
 
 #
+# Clock App Component
+#
+CONFIG_CLOCK_APP_AUTO_DOWNLOAD=y
+CONFIG_CLOCK_APP_CACHE_TIMEOUT=24
+# end of Clock App Component
+
+#
 # mDNS
 #
 CONFIG_MDNS_MAX_INTERFACES=3

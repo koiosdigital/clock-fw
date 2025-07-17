@@ -15,7 +15,7 @@ message(STATUS ${NESTED_SRC})
 idf_component_register(
     SRCS ${NESTED_SRC}
     INCLUDE_DIRS ${INCLUDE_DIRS}
-    REQUIRES lwip esp_wifi heap json bootloader_support kd_common esp_http_client wifi_provisioning esp_driver_rmt mbedtls driver esp_http_server
+    REQUIRES lwip esp_wifi heap json bootloader_support kd_common esp_http_client wifi_provisioning esp_driver_rmt mbedtls driver esp_http_server clock-app
 )
 
 idf_build_set_property(COMPILE_OPTIONS "-Wno-missing-field-initializers" APPEND)
