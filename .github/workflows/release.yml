@@ -65,6 +65,7 @@ jobs:
             # Set up the environment
             export BUILD_VERSION=${{ env.BUILD_VERSION }}
             export BUILD_VARIANT=${{ matrix.config }}
+            export GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
 
             #build
             idf.py build | tee build.log

@@ -17,16 +17,29 @@ file(MAKE_DIRECTORY ${INCLUDE_DIR})
 
 # Function to get the latest release tag
 function(get_latest_release_tag REPO_NAME OUTPUT_VAR)
-    execute_process(
-        COMMAND curl -s "https://api.github.com/repos/${REPO_NAME}/releases/latest"
-        COMMAND grep "tag_name"
-        COMMAND head -n 1
-        COMMAND cut -d ":" -f 2
-        COMMAND sed "s/[\", ]//g"
-        OUTPUT_VARIABLE LATEST_TAG
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        RESULT_VARIABLE CURL_RESULT
-    )
+    if(DEFINED ENV{GITHUB_TOKEN})
+        execute_process(
+            COMMAND curl -s -H "Authorization: token $ENV{GITHUB_TOKEN}" "https://api.github.com/repos/${REPO_NAME}/releases/latest"
+            COMMAND grep "tag_name"
+            COMMAND head -n 1
+            COMMAND cut -d ":" -f 2
+            COMMAND sed "s/[\", ]//g"
+            OUTPUT_VARIABLE LATEST_TAG
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE CURL_RESULT
+        )
+    else()
+        execute_process(
+            COMMAND curl -s "https://api.github.com/repos/${REPO_NAME}/releases/latest"
+            COMMAND grep "tag_name"
+            COMMAND head -n 1
+            COMMAND cut -d ":" -f 2
+            COMMAND sed "s/[\", ]//g"
+            OUTPUT_VARIABLE LATEST_TAG
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE CURL_RESULT
+        )
+    endif()
     
     if(CURL_RESULT EQUAL 0 AND NOT "${LATEST_TAG}" STREQUAL "")
         set(${OUTPUT_VAR} ${LATEST_TAG} PARENT_SCOPE)
