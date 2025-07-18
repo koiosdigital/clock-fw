@@ -47,6 +47,10 @@ void led_set_mask(const uint8_t* mask);
 void led_clear_mask();
 const uint8_t* led_get_mask();
 
+// Current limiting functions
+void led_set_current_limit(int32_t limit_ma);
+int32_t led_get_current_limit(void);
+
 void led_load_from_nvs(led_persistent_config_t* config);
 void led_save_to_nvs(led_persistent_config_t* config);
 void led_apply_persistent_config(led_persistent_config_t* config);

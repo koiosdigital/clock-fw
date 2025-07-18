@@ -410,6 +410,8 @@ void fibonacci_clock_init() {
     }
 
     led_init(fibonacci_led_config);
+    led_set_current_limit(600);
+
     pixel_buffer = led_get_buffer();
 
     if (pixel_buffer == nullptr) {

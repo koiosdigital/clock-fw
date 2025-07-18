@@ -140,6 +140,8 @@ void nixie_clock_init() {
     }
 
     led_init(nixie_led_config);
+    led_set_current_limit(600);
+
     led_set_effect(LED_BREATHE);
     led_set_color(0, 255, 255, 0);
 

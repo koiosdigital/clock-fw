@@ -246,6 +246,8 @@ void wordclock_clock_task(void* pvParameter) {
 
 void wordclock_clock_init() {
     led_init(wordclock_led_config);
+    led_set_current_limit(2000); // 256 leds, so 2000 mA is 7.8 mA per LED, just as a stopgap. We never use all LEDs at once in regular operation
+
     led_set_effect(LED_BREATHE);  // Start with blinking teal waiting for WiFi
     led_set_color(0, 255, 255, 0);  // Teal color
     led_set_brightness(50);

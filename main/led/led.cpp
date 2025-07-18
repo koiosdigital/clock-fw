@@ -21,6 +21,10 @@ static uint8_t led_brightness = 255;
 static uint8_t led_color[4] = { 0, 0, 0, 0 };
 static bool leds_on = false;
 
+// Current limiting variables
+static int32_t current_limit_ma = -1;  // -1 = unlimited, otherwise limit in mA
+static uint8_t* led_scaled_buffer = nullptr;  // Secondary buffer for current-limited output
+
 static bool fading_out = false;
 static bool fading_in = false;
 
@@ -29,6 +33,8 @@ static bool blink_state = false;
 
 uint8_t* led_buffer = nullptr;
 uint8_t* led_mask = nullptr;
+
+void led_apply_current_limiting(); // Forward declaration
 
 // HSV to RGB conversion helper function
 void hsv_to_rgb(uint8_t h, uint8_t s, uint8_t v, uint8_t* r, uint8_t* g, uint8_t* b) {
@@ -92,6 +98,15 @@ void led_set_brightness(uint8_t brightness) {
 
 void led_set_on_state(bool on) {
     leds_on = on;
+}
+
+// Current limiting functions
+void led_set_current_limit(int32_t limit_ma) {
+    current_limit_ma = limit_ma;
+}
+
+int32_t led_get_current_limit(void) {
+    return current_limit_ma;
 }
 
 //Helpers
@@ -362,6 +377,7 @@ void led_task(void* pvParameter) {
     is_rgbw = config->is_rgbw;
     size_t bufSize = is_rgbw ? led_count * 4 : led_count * 3;
     led_buffer = (uint8_t*)malloc(bufSize);
+    led_scaled_buffer = (uint8_t*)malloc(bufSize);  // Allocate secondary buffer
 
     // Allocate and initialize mask buffer (defaults to all 1s)
     led_mask = (uint8_t*)malloc(led_count);
@@ -392,7 +408,10 @@ void led_task(void* pvParameter) {
     while (1) {
         led_loop();
 
-        rmt_transmit(led_chan, led_encoder, led_buffer, bufSize, &tx_config);
+        // Apply current limiting to secondary buffer
+        led_apply_current_limiting();
+
+        rmt_transmit(led_chan, led_encoder, led_scaled_buffer, bufSize, &tx_config);
         rmt_tx_wait_all_done(led_chan, portMAX_DELAY);
 
         vTaskDelay(pdMS_TO_TICKS(1000 / 15));
@@ -497,4 +516,68 @@ void led_clear_mask() {
 
 const uint8_t* led_get_mask() {
     return led_mask;
+}
+
+// Current limiting helper function
+void led_apply_current_limiting() {
+    if (current_limit_ma <= 0 || led_buffer == nullptr || led_scaled_buffer == nullptr) {
+        // No current limiting or buffers not ready - copy buffer as-is
+        size_t bufSize = is_rgbw ? led_count * 4 : led_count * 3;
+        memcpy(led_scaled_buffer, led_buffer, bufSize);
+        return;
+    }
+
+    // Calculate total current consumption at full brightness
+    uint32_t total_current_ma = 0;
+
+    for (int i = 0; i < led_count; i++) {
+        if (is_rgbw) {
+            uint8_t g = led_buffer[i * 4 + 0];
+            uint8_t r = led_buffer[i * 4 + 1];
+            uint8_t b = led_buffer[i * 4 + 2];
+            uint8_t w = led_buffer[i * 4 + 3];
+
+            // Each channel at 255 uses 20mA, scale proportionally
+            total_current_ma += (r * 20) / 255;
+            total_current_ma += (g * 20) / 255;
+            total_current_ma += (b * 20) / 255;
+            total_current_ma += (w * 20) / 255;
+        }
+        else {
+            uint8_t g = led_buffer[i * 3 + 0];
+            uint8_t r = led_buffer[i * 3 + 1];
+            uint8_t b = led_buffer[i * 3 + 2];
+
+            total_current_ma += (r * 20) / 255;
+            total_current_ma += (g * 20) / 255;
+            total_current_ma += (b * 20) / 255;
+        }
+    }
+
+    // Reserve 400mA for other system components
+    uint32_t available_current_ma = (current_limit_ma > 400) ? (current_limit_ma - 400) : 0;
+
+    if (total_current_ma <= available_current_ma) {
+        // Within limits - copy buffer as-is
+        size_t bufSize = is_rgbw ? led_count * 4 : led_count * 3;
+        memcpy(led_scaled_buffer, led_buffer, bufSize);
+        return;
+    }
+
+    // Scale down to fit within current limit
+    uint32_t scale_factor_256 = (available_current_ma * 256) / total_current_ma;
+
+    for (int i = 0; i < led_count; i++) {
+        if (is_rgbw) {
+            led_scaled_buffer[i * 4 + 0] = (led_buffer[i * 4 + 0] * scale_factor_256) / 256;  // G
+            led_scaled_buffer[i * 4 + 1] = (led_buffer[i * 4 + 1] * scale_factor_256) / 256;  // R
+            led_scaled_buffer[i * 4 + 2] = (led_buffer[i * 4 + 2] * scale_factor_256) / 256;  // B
+            led_scaled_buffer[i * 4 + 3] = (led_buffer[i * 4 + 3] * scale_factor_256) / 256;  // W
+        }
+        else {
+            led_scaled_buffer[i * 3 + 0] = (led_buffer[i * 3 + 0] * scale_factor_256) / 256;  // G
+            led_scaled_buffer[i * 3 + 1] = (led_buffer[i * 3 + 1] * scale_factor_256) / 256;  // R
+            led_scaled_buffer[i * 3 + 2] = (led_buffer[i * 3 + 2] * scale_factor_256) / 256;  // B
+        }
+    }
 }
