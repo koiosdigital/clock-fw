@@ -5,7 +5,7 @@
 #include "freertos/task.h"
 #include "stdint.h"
 
-#include "led.h"
+#include "kd_pixdriver.h"
 #include <soc/gpio_num.h>
 #include <esp_random.h>
 #include <time.h>
@@ -25,12 +25,6 @@ static bool is_rgbw = true;
 #else
 static bool is_rgbw = false;
 #endif
-
-LEDConfig_t wordclock_led_config = {
-    .pin = (gpio_num_t)CONFIG_WORDCLOCK_LED_DATA_PIN,  // Example GPIO pin
-    .count = 256,
-    .is_rgbw = is_rgbw,   // Assuming RGB, not RGBW
-};
 
 uint8_t bits[256] = { 0 };
 char wordclock_words_buffer[128] = { 0 };
@@ -203,8 +197,7 @@ end:
         return;
     }
 
-    // Set the LED mask based on the bits
-    led_set_mask(bits);
+    PixelDriver::getMainChannel()->setMask(std::vector<uint8_t>(bits, bits + 256));
 }
 
 void wordclock_clock_task(void* pvParameter) {
@@ -213,19 +206,15 @@ void wordclock_clock_task(void* pvParameter) {
     int lastHour = -1;
     int lastMinute = -1;
 
-    led_set_color(255, 255, 0, 0);  // Yellow during sync
-    led_set_effect(LED_CYCLIC);
-    led_set_brightness(255);
+    PixelDriver::getMainChannel()->setColor(PixelColor(255, 255, 0)); // Yellow during sync
+    PixelDriver::getMainChannel()->setEffectByID("CYCLIC");
 
     // Wait for time sync while LED shows cyclic yellow (set by wifi_connected handler)
     while (!is_time_synced()) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    // Restore saved LED configuration after sync
-    led_persistent_config_t persistent_config;
-    led_load_from_nvs(&persistent_config);
-    led_apply_persistent_config(&persistent_config);
+    PixelDriver::getMainChannel()->loadFromNVS();
 
     while (true) {
         time(&now);
@@ -245,12 +234,13 @@ void wordclock_clock_task(void* pvParameter) {
 }
 
 void wordclock_clock_init() {
-    led_init(wordclock_led_config);
-    led_set_current_limit(2000); // 256 leds, so 2000 mA is 7.8 mA per LED, just as a stopgap. We never use all LEDs at once in regular operation
+    PixelDriver::initialize(60);
+    PixelDriver::setCurrentLimit(2000); // 600mA limit for Nixie LEDs
+    PixelDriver::addChannel(ChannelConfig((gpio_num_t)CONFIG_WORDCLOCK_LED_DATA_PIN, 256, is_rgbw ? PixelFormat::RGBW : PixelFormat::RGB, "Word Clock"));
+    PixelDriver::start();
 
-    led_set_effect(LED_BREATHE);  // Start with blinking teal waiting for WiFi
-    led_set_color(0, 255, 255, 0);  // Teal color
-    led_set_brightness(50);
+    PixelDriver::getMainChannel()->setColor(PixelColor(0, 255, 255));
+    PixelDriver::getMainChannel()->setEffectByID("BREATHE");
 }
 
 #endif

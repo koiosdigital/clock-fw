@@ -6,7 +6,7 @@
 #include "freertos/task.h"
 #include "stdint.h"
 
-#include "led.h"
+#include "kd_pixdriver.h"
 #include <soc/gpio_num.h>
 #include <esp_random.h>
 #include <ctime>
@@ -20,13 +20,7 @@
 
 #ifdef CONFIG_BASE_CLOCK_TYPE_FIBONACCI
 
-LEDConfig_t fibonacci_led_config = {
-    .pin = (gpio_num_t)4,  // Example GPIO pin
-    .count = 9,
-    .is_rgbw = false,   // Assuming RGB, not RGBW
-};
-
-uint8_t* pixel_buffer = nullptr;
+std::vector<PixelColor>* pixel_buffer = nullptr;
 uint8_t bits[9] = { 0 };
 
 static fibonacci_config_t fib_config = {
@@ -58,9 +52,9 @@ int random(int max)
 
 void setPixelHelper(uint8_t pixel, uint32_t color)
 {
-    pixel_buffer[pixel * 3] = (color >> 16) & 0xFF; // Red
-    pixel_buffer[pixel * 3 + 1] = (color >> 8) & 0xFF; // Green
-    pixel_buffer[pixel * 3 + 2] = color & 0xFF; // Blue
+    if (pixel < pixel_buffer->size()) {
+        (*pixel_buffer)[pixel] = PixelColor((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF);
+    }
 }
 
 void setPixel(uint8_t pixel, uint32_t color)
@@ -298,7 +292,7 @@ void setBits(uint8_t value, uint8_t offset)
 void setTime(uint8_t hours, uint8_t minutes)
 {
     // Clear all pixels first
-    memset(pixel_buffer, 0, 9 * 3);
+    std::fill(pixel_buffer->begin(), pixel_buffer->end(), PixelColor(0, 0, 0));
 
     for (int i = 0; i < 9; i++)
         bits[i] = 0;
@@ -332,15 +326,15 @@ void fibonacci_clock_task(void* pvParameters) {
     int lastHour = -1;
     int lastMinute = -1;
 
-    led_set_color(255, 255, 0, 0);  // Yellow during sync
-    led_set_effect(LED_CYCLIC);
-    led_set_brightness(255);
+    PixelDriver::getMainChannel()->setColor(PixelColor(255, 255, 0)); // Yellow during sync
+    PixelDriver::getMainChannel()->setEffectByID("CYCLIC");
+    PixelDriver::getMainChannel()->setBrightness(255);
 
     while (!is_time_synced()) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    led_set_effect(LED_RAW_BUFFER);
+    PixelDriver::getMainChannel()->setEffectByID("raw");
 
     while (true) {
         time(&now);
@@ -364,7 +358,7 @@ void fibonacci_clock_task(void* pvParameters) {
 // Fibonacci configuration functions
 void fibonacci_set_brightness(uint8_t brightness) {
     fib_config.brightness = brightness;
-    led_set_brightness(brightness);
+    PixelDriver::getMainChannel()->setBrightness(brightness);
     fibonacci_save_to_nvs(&fib_config);
     forceUpdate = true; // Force update the display
 }
@@ -409,10 +403,12 @@ void fibonacci_clock_init() {
         register_fibonacci_handlers(server);
     }
 
-    led_init(fibonacci_led_config);
-    led_set_current_limit(600);
+    PixelDriver::initialize(60);
+    PixelDriver::setCurrentLimit(1000); // 2000mA limit for Fibonacci LEDs
+    PixelDriver::addChannel(ChannelConfig((gpio_num_t)CONFIG_FIBONACCI_LED_DATA_PIN, 9, PixelFormat::RGB, "Fibonacci"));
+    PixelDriver::start();
 
-    pixel_buffer = led_get_buffer();
+    pixel_buffer = &PixelDriver::getMainChannel()->getPixelBuffer();
 
     if (pixel_buffer == nullptr) {
         esp_restart(); // Critical failure, cannot proceed without pixel buffer
@@ -425,7 +421,7 @@ void fibonacci_clock_init() {
     // Apply loaded configuration
     fibonacci_apply_config(&fib_config);
 
-    led_set_effect(LED_BREATHE);  // Start with blinking teal waiting for WiFi
-    led_set_color(0, 255, 255, 0);  // Teal color
+    PixelDriver::getMainChannel()->setColor(PixelColor(0, 255, 255));
+    PixelDriver::getMainChannel()->setEffectByID("BREATHE");
 }
 #endif

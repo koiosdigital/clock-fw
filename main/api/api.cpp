@@ -53,6 +53,7 @@ void server_init() {
     /* Generate default configuration */
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers = 50;
+    config.uri_match_fn = httpd_uri_match_wildcard;
 
     httpd_start(&kd_server, &config);
 }
@@ -372,7 +373,7 @@ void api_init() {
         .user_ctx = NULL
     };    httpd_register_uri_handler(server, &time_zones_uri);
 
-    register_led_handlers(server);
+    led_api_register_handlers(server);
 
     // Create an array of httpd_uri_t to keep them alive after the loop
     static httpd_uri_t static_file_uris[static_files::num_of_files + 1]; // +1 for root '/' handler

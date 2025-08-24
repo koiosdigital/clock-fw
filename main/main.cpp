@@ -17,7 +17,7 @@
 #include "cJSON.h"
 #include "internet_time.h"
 #include "api.h"
-#include "led.h"
+#include "kd_pixdriver.h"
 
 #ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
 #include "nixie/nixie.h"
@@ -31,26 +31,26 @@
 
 void wifi_prov_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     ESP_LOGI("Clock", "WiFi Provisioning connected");
-    led_set_color(0, 0, 255, 0); // Solid blue when provisioning connected
-    led_set_effect(LED_SOLID);
+    PixelDriver::getMainChannel()->setColor(PixelColor(0, 0, 255));
+    PixelDriver::getMainChannel()->setEffectByID("SOLID");
 }
 
 void wifi_prov_started(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     ESP_LOGI("Clock", "WiFi Provisioning started");
-    led_set_color(0, 0, 255, 0); // Blinking blue when provisioning started
-    led_set_effect(LED_BREATHE);
+    PixelDriver::getMainChannel()->setColor(PixelColor(0, 0, 255));
+    PixelDriver::getMainChannel()->setEffectByID("BREATHE");
 }
 
 void wifi_disconnected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     ESP_LOGI("Clock", "WiFi disconnected - waiting for connection");
-    led_set_color(0, 255, 255, 0); // Blinking teal while waiting for WiFi
-    led_set_effect(LED_BREATHE);
+    PixelDriver::getMainChannel()->setColor(PixelColor(0, 255, 255));
+    PixelDriver::getMainChannel()->setEffectByID("BREATHE");
 }
 
 void wifi_connected(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     ESP_LOGI("Clock", "WiFi connected - starting time sync");
-    led_set_color(255, 255, 0, 0);  // Cyclic yellow during time sync
-    led_set_effect(LED_CYCLIC);
+    PixelDriver::getMainChannel()->setColor(PixelColor(255, 255, 0));
+    PixelDriver::getMainChannel()->setEffectByID("CYCLIC");
 
 #ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
     xTaskCreate(nixie_clock_task, "clock_task", 4096, NULL, 5, NULL);

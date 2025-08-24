@@ -8,7 +8,7 @@
 #include "freertos/task.h"
 #include "stdint.h"
 
-#include "led.h"
+#include "kd_pixdriver.h"
 #include <soc/gpio_num.h>
 #include <esp_random.h>
 #include <time.h>
@@ -21,12 +21,6 @@
 #include <api.h>
 
 #ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
-
-LEDConfig_t nixie_led_config = {
-    .pin = (gpio_num_t)CONFIG_NIXIE_LED_DATA_PIN,
-    .count = CONFIG_NIXIE_LED_COUNT,
-    .is_rgbw = CONFIG_NIXIE_LED_IS_RGBW,
-};
 
 nixie_config_t nixie_config = {
     .brightness = 50,
@@ -80,18 +74,15 @@ void nixie_clock_task(void* pvParameters) {
     int cleaningIteration = 0;
     bool cleaning = false;
 
-    led_set_color(255, 255, 0, 0);  // Yellow during sync
-    led_set_effect(LED_CYCLIC);
-    led_set_brightness(255);
+    PixelDriver::getMainChannel()->setColor(PixelColor(255, 255, 0)); // Yellow during sync
+    PixelDriver::getMainChannel()->setEffectByID("CYCLIC");
+    PixelDriver::getMainChannel()->setBrightness(255);
 
     while (!is_time_synced()) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    // Restore saved LED configuration after sync
-    led_persistent_config_t persistent_config;
-    led_load_from_nvs(&persistent_config);
-    led_apply_persistent_config(&persistent_config);
+    PixelDriver::getMainChannel()->loadFromNVS();
 
     while (true) {
         time(&now);
@@ -139,11 +130,13 @@ void nixie_clock_init() {
         register_nixie_handlers(server);
     }
 
-    led_init(nixie_led_config);
-    led_set_current_limit(600);
+    PixelDriver::initialize(60);
+    PixelDriver::addChannel(ChannelConfig((gpio_num_t)CONFIG_NIXIE_LED_DATA_PIN, CONFIG_NIXIE_LED_COUNT, CONFIG_NIXIE_LED_IS_RGBW ? PixelFormat::RGBW : PixelFormat::RGB, "Backlight"));
+    PixelDriver::setCurrentLimit(600); // 600mA limit for Nixie LEDs
+    PixelDriver::start();
 
-    led_set_effect(LED_BREATHE);
-    led_set_color(0, 255, 255, 0);
+    PixelDriver::getMainChannel()->setColor(PixelColor(0, 255, 255));
+    PixelDriver::getMainChannel()->setEffectByID("BREATHE");
 
     // Load nixie configuration from NVS
     nixie_load_from_nvs(&nixie_config);

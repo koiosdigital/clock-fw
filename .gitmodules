@@ -13,3 +13,6 @@
 [submodule "components/protobufs"]
 	path = components/protobufs
 	url = https://github.com/levitree/protobufs
+[submodule "components/kd_pixdriver"]
+	path = components/kd_pixdriver
+	url = https://github.com/koiosdigital/kd_pixdriver
