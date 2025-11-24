@@ -1,0 +1,654 @@
+openapi: 3.0.3
+info:
+  title: KD Clock API
+  description: |
+    Comprehensive API documentation for the KD Clock firmware. This API provides endpoints to control various clock types including Nixie, Fibonacci, and Wordclock devices.
+
+    **Device Types:**
+    - **Nixie**: Traditional nixie tube displays with brightness and time format controls
+    - **Fibonacci**: LED-based clock using Fibonacci sequence with customizable themes
+    - **Wordclock**: Word-based time display with LED effects
+
+    **Note**: Device-specific endpoints (nixie and fibonacci) are only available on devices of the corresponding type. The fibonacci device does NOT support LED effect configuration.
+  version: "1.0.0"
+  contact:
+    name: Koios Digital
+    url: https://koiosdigital.com
+servers:
+  - url: http://{device_ip}
+    description: Local device server
+    variables:
+      device_ip:
+        default: "192.168.1.100"
+        description: IP address of the clock device
+
+tags:
+  - name: System
+    description: System information and configuration
+  - name: Time
+    description: Time synchronization and timezone management
+  - name: LED
+    description: LED strip control and effects (not available on fibonacci devices)
+  - name: Nixie
+    description: Nixie tube specific controls (nixie devices only)
+  - name: Fibonacci
+    description: Fibonacci clock specific controls (fibonacci devices only)
+
+paths:
+  /:
+    get:
+      summary: Root endpoint
+      description: Returns a welcome message or serves the main web interface
+      tags: [System]
+      responses:
+        "200":
+          description: Welcome message or HTML interface
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Welcome to the KD Clock API!"
+            text/html:
+              schema:
+                type: string
+
+  /api/about:
+    get:
+      summary: Get device information
+      description: Returns basic information about the clock device including model, type, and firmware version
+      tags: [System]
+      responses:
+        "200":
+          description: Device information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  model:
+                    type: string
+                    description: The firmware variant/model
+                    example: "CLOCK-V1"
+                  type:
+                    type: string
+                    description: The device type
+                    example: "clock"
+                  subtype:
+                    type: string
+                    enum: [nixie, fibonacci, wordclock]
+                    description: The specific clock implementation
+                    example: "nixie"
+                  version:
+                    type: string
+                    description: Firmware version
+                    example: "1.0.0"
+                required: [model, type, subtype, version]
+
+  /api/system/config:
+    get:
+      summary: Get system configuration
+      description: Returns current system configuration including timezone, NTP server, and hostname settings
+      tags: [System]
+      responses:
+        "200":
+          description: Current system configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemConfig"
+        "500":
+          description: Internal server error
+
+    post:
+      summary: Update system configuration
+      description: Updates system configuration settings for timezone, NTP server, and hostname
+      tags: [System]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SystemConfigUpdate"
+      responses:
+        "200":
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+        "400":
+          description: Invalid JSON format or parameters
+        "408":
+          description: Request timeout
+        "500":
+          description: Internal server error
+
+  /api/time/zonedb:
+    get:
+      summary: Get available timezones
+      description: Returns a list of all available timezone names and rules from the embedded timezone database
+      tags: [Time]
+      responses:
+        "200":
+          description: List of available timezones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      description: Timezone name
+                      example: "America/New_York"
+                    rule:
+                      type: string
+                      description: Timezone rule string
+                      example: "EST5EDT,M3.2.0,M11.1.0"
+                  required: [name, rule]
+
+  /api/led/effects:
+    get:
+      summary: List available LED effects
+      description: Returns a list of all available LED effects that can be applied to LED channels. Not available on fibonacci devices.
+      tags: [LED]
+      responses:
+        "200":
+          description: List of available effects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      description: Human-readable effect name
+                      example: "Breathe"
+                    id:
+                      type: string
+                      description: Effect identifier for API calls
+                      example: "BREATHE"
+                  required: [name, id]
+
+  /api/led/config:
+    get:
+      summary: Get LED channel configuration
+      description: Returns information about available LED channels and their properties. Not available on fibonacci devices.
+      tags: [LED]
+      responses:
+        "200":
+          description: LED channel configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  channels:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index:
+                          type: integer
+                          description: Channel index number
+                          example: 0
+                        num_leds:
+                          type: integer
+                          description: Number of LEDs in this channel
+                          example: 60
+                        type:
+                          type: string
+                          enum: [RGB, RGBW]
+                          description: LED type
+                          example: "RGB"
+                        name:
+                          type: string
+                          description: Channel name
+                          example: "Backlight"
+                      required: [index, num_leds, type, name]
+                required: [channels]
+
+  /api/led/channel/{channelIndex}:
+    get:
+      summary: Get LED channel state
+      description: Returns the current configuration and state of a specific LED channel. Not available on fibonacci devices.
+      tags: [LED]
+      parameters:
+        - name: channelIndex
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+          description: The LED channel index
+      responses:
+        "200":
+          description: LED channel state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LEDChannelState"
+        "400":
+          description: Invalid channel index
+        "404":
+          description: Channel not found
+
+    post:
+      summary: Configure LED channel
+      description: Updates the configuration of a specific LED channel including color, brightness, effect, and power state. Not available on fibonacci devices.
+      tags: [LED]
+      parameters:
+        - name: channelIndex
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+          description: The LED channel index
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LEDChannelConfig"
+      responses:
+        "200":
+          description: Updated LED channel state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LEDChannelState"
+        "400":
+          description: Invalid channel index or JSON format
+        "404":
+          description: Channel not found
+        "500":
+          description: Internal server error
+
+  /api/nixie:
+    get:
+      summary: Get nixie configuration
+      description: Returns the current configuration of the nixie tubes including brightness, time format, and other settings. Only available on nixie devices.
+      tags: [Nixie]
+      responses:
+        "200":
+          description: Current nixie configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NixieConfig"
+        "500":
+          description: Internal server error
+
+    post:
+      summary: Update nixie configuration
+      description: Updates the nixie tube configuration including brightness, time format, blinking dots, and power state. Only available on nixie devices.
+      tags: [Nixie]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NixieConfigUpdate"
+      responses:
+        "200":
+          description: Updated nixie configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NixieConfig"
+        "400":
+          description: Invalid JSON format or configuration parameters
+        "408":
+          description: Request timeout
+        "500":
+          description: Internal server error
+
+  /api/fibonacci:
+    get:
+      summary: Get fibonacci configuration
+      description: Returns the current configuration of the fibonacci clock including brightness, theme, and power state. Also includes available themes. Only available on fibonacci devices.
+      tags: [Fibonacci]
+      responses:
+        "200":
+          description: Current fibonacci configuration with available themes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FibonacciConfig"
+        "500":
+          description: Internal server error
+
+    post:
+      summary: Update fibonacci configuration
+      description: Updates the fibonacci clock configuration including brightness, theme selection, and power state. Only available on fibonacci devices.
+      tags: [Fibonacci]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FibonacciConfigUpdate"
+      responses:
+        "200":
+          description: Updated fibonacci configuration (includes available themes)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FibonacciConfig"
+        "400":
+          description: Invalid JSON format or configuration parameters
+        "408":
+          description: Request timeout
+        "500":
+          description: Internal server error
+
+components:
+  schemas:
+    SystemConfig:
+      type: object
+      properties:
+        auto_timezone:
+          type: boolean
+          description: Whether automatic timezone detection is enabled
+          example: false
+        timezone:
+          type: string
+          description: Current timezone identifier
+          example: "America/New_York"
+        ntp_server:
+          type: string
+          description: NTP server address for time synchronization
+          example: "pool.ntp.org"
+        wifi_hostname:
+          type: string
+          description: WiFi hostname of the device
+          example: "kd-clock-001"
+      required: [auto_timezone, timezone, ntp_server, wifi_hostname]
+
+    SystemConfigUpdate:
+      type: object
+      properties:
+        auto_timezone:
+          type: boolean
+          description: Enable/disable automatic timezone detection
+        timezone:
+          type: string
+          description: Timezone identifier to set
+          maxLength: 63
+        ntp_server:
+          type: string
+          description: NTP server address
+          maxLength: 63
+        wifi_hostname:
+          type: string
+          description: WiFi hostname (1-63 characters)
+          minLength: 1
+          maxLength: 63
+      description: All fields are optional. Only provided fields will be updated.
+
+    Color:
+      type: object
+      properties:
+        r:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: Red component
+        g:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: Green component
+        b:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: Blue component
+        w:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: White component (RGBW channels only)
+      required: [r, g, b]
+
+    LEDChannelState:
+      type: object
+      properties:
+        effect_id:
+          type: string
+          description: Current effect identifier
+          example: "SOLID"
+        brightness:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: Channel brightness
+          example: 255
+        speed:
+          type: integer
+          description: Effect speed parameter
+          example: 50
+        on:
+          type: boolean
+          description: Whether the channel is enabled
+          example: true
+        color:
+          $ref: "#/components/schemas/Color"
+      required: [effect_id, brightness, speed, on, color]
+
+    LEDChannelConfig:
+      type: object
+      properties:
+        effect_id:
+          type: string
+          description: Effect identifier to apply
+          example: "BREATHE"
+        brightness:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: Channel brightness
+        speed:
+          type: integer
+          description: Effect speed parameter
+        on:
+          type: boolean
+          description: Enable/disable the channel
+        color:
+          $ref: "#/components/schemas/Color"
+      description: All fields are optional. Only provided fields will be updated.
+
+    NixieConfig:
+      type: object
+      properties:
+        brightness:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Nixie tube brightness percentage
+          example: 50
+        military_time:
+          type: boolean
+          description: Use 24-hour format (true) or 12-hour format (false)
+          example: false
+        blinking_dots:
+          type: boolean
+          description: Enable blinking separator dots
+          example: true
+        on:
+          type: boolean
+          description: Whether the nixie tubes are powered on
+          example: true
+      required: [brightness, military_time, blinking_dots, on]
+
+    NixieConfigUpdate:
+      type: object
+      properties:
+        brightness:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Nixie tube brightness percentage
+        military_time:
+          type: boolean
+          description: Use 24-hour format (true) or 12-hour format (false)
+        blinking_dots:
+          type: boolean
+          description: Enable blinking separator dots
+        on:
+          type: boolean
+          description: Power state of the nixie tubes
+      description: All fields are optional. Only provided fields will be updated.
+
+    FibonacciTheme:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Theme identifier
+          example: 0
+        name:
+          type: string
+          description: Theme name
+          example: "RGB"
+        hour_color:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+          description: Color for hour segments (hex format)
+          example: "#FF0000"
+        minute_color:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+          description: Color for minute segments (hex format)
+          example: "#00FF00"
+        both_color:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+          description: Color for segments showing both hour and minute (hex format)
+          example: "#0000FF"
+      required: [id, name, hour_color, minute_color, both_color]
+
+    FibonacciConfig:
+      type: object
+      properties:
+        brightness:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: LED brightness
+          example: 255
+        theme_id:
+          type: integer
+          minimum: 0
+          description: Currently selected theme ID
+          example: 0
+        on:
+          type: boolean
+          description: Whether the fibonacci clock is powered on
+          example: true
+        themes:
+          type: array
+          description: Available color themes
+          items:
+            $ref: "#/components/schemas/FibonacciTheme"
+      required: [brightness, theme_id, on, themes]
+
+    FibonacciConfigUpdate:
+      type: object
+      properties:
+        brightness:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: LED brightness
+        theme_id:
+          type: integer
+          minimum: 0
+          description: Theme ID to select
+        on:
+          type: boolean
+          description: Power state of the fibonacci clock
+      description: All fields are optional. Only provided fields will be updated.
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid parameters or JSON format
+      content:
+        text/plain:
+          schema:
+            type: string
+            example: "Invalid JSON format"
+
+    NotFound:
+      description: Resource not found
+      content:
+        text/plain:
+          schema:
+            type: string
+            example: "Channel not found"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        text/plain:
+          schema:
+            type: string
+            example: "Internal server error"
+
+    RequestTimeout:
+      description: Request timeout
+      content:
+        text/plain:
+          schema:
+            type: string
+            example: "Request timeout"
+
+  examples:
+    NixieConfigurationExample:
+      summary: Example nixie configuration
+      value:
+        brightness: 75
+        military_time: false
+        blinking_dots: true
+        on: true
+
+    FibonacciConfigurationExample:
+      summary: Example fibonacci configuration
+      value:
+        brightness: 200
+        theme_id: 2
+        on: true
+
+    LEDChannelConfigExample:
+      summary: Example LED channel configuration
+      value:
+        effect_id: "BREATHE"
+        brightness: 128
+        speed: 75
+        on: true
+        color:
+          r: 255
+          g: 100
+          b: 0
+
+    SystemConfigExample:
+      summary: Example system configuration
+      value:
+        auto_timezone: false
+        timezone: "America/Los_Angeles"
+        ntp_server: "time.nist.gov"
+        wifi_hostname: "my-nixie-clock"
+
+security: []
+
+externalDocs:
+  description: Find out more about KD Clock
+  url: https://koiosdigital.com

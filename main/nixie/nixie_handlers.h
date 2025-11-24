@@ -5,12 +5,6 @@
 #include <stdbool.h>
 #include "nixie.h"
 
-// WebSocket nixie configuration handler
-esp_err_t nixie_websocket_handler(httpd_req_t* req);
-
-// Helper function to broadcast nixie state to all connected clients
-void nixie_broadcast_state(void);
-
 // Helper function to register nixie handlers
 void register_nixie_handlers(httpd_handle_t server);
 

@@ -4,22 +4,11 @@
 #include "fibonacci.h"
 
 /**
- * @brief Register all Fibonacci clock WebSocket and HTTP handlers
+ * @brief Register all Fibonacci clock HTTP handlers
  *
  * @param server HTTP server handle
  */
 void register_fibonacci_handlers(httpd_handle_t server);
-
-/**
- * @brief WebSocket handler for real-time Fibonacci configuration
- *
- * Handles WebSocket connections for live Fibonacci clock control.
- * Sends current state on connect and processes configuration updates.
- *
- * @param req HTTP request
- * @return esp_err_t ESP_OK on success
- */
-esp_err_t fibonacci_websocket_handler(httpd_req_t* req);
 
 /**
  * @brief HTTP GET handler for Fibonacci configuration
@@ -40,11 +29,6 @@ esp_err_t fibonacci_config_get_handler(httpd_req_t* req);
  * @return esp_err_t ESP_OK on success
  */
 esp_err_t fibonacci_config_post_handler(httpd_req_t* req);
-
-/**
- * @brief Broadcast current Fibonacci state to all WebSocket clients
- */
-void fibonacci_broadcast_state(void);
 
 /**
  * @brief Load Fibonacci configuration from NVS
