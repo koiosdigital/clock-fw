@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.16)
 IF(DEFINED ENV{BUILD_VERSION})
 set(PROJECT_VER $ENV{BUILD_VERSION})
 ELSE()
-set(PROJECT_VER "0.3.7")
+set(PROJECT_VER "0.3.8")
 ENDIF()
 
 
