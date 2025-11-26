@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    uses: acvigue/.github/.github/workflows/idf_build.yml@main
+    uses: acvigue/.github/.github/workflows/idf_build.yaml@main
     with:
       idf_version: v5.5.1
       project_name: KD Clock
