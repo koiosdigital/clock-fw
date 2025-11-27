@@ -64,7 +64,7 @@ void time_init() {
     time_load_config_from_nvs();
 
     // Set up the task to fetch and set the time
-    xTaskCreate(setup_time_task, "setup_time_task", 4096, NULL, 5, NULL);
+    xTaskCreate(setup_time_task, "setup_time_task", 8192, NULL, 5, NULL);
 }
 
 // Time configuration functions
