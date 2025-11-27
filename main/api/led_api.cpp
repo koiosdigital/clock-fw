@@ -165,6 +165,7 @@ static esp_err_t led_channel_config_handler(httpd_req_t* req) {
     }
 
     ch->setEffect(eff_cfg);
+    ch->saveToNVS();
 
     cJSON_Delete(json);
     return led_channel_get_handler(req); // Return updated config
