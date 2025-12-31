@@ -200,7 +200,13 @@ end:
         return;
     }
 
-    PixelDriver::getMainChannel()->setMask(std::vector<uint8_t>(bits, bits + 256));
+    // Use static mask buffer to avoid heap allocation on every update
+    static std::vector<uint8_t> mask_buffer;
+    if (mask_buffer.empty()) {
+        mask_buffer.resize(256);
+    }
+    std::copy(bits, bits + 256, mask_buffer.begin());
+    PixelDriver::getMainChannel()->setMask(mask_buffer);
 }
 
 // Update the display with current time

@@ -58,11 +58,11 @@ void wifi_connected(void* arg, esp_event_base_t event_base, int32_t event_id, vo
     // Only create clock task once (prevent duplicates on WiFi reconnect)
     if (s_clock_task_handle == NULL) {
 #ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
-        xTaskCreate(nixie_clock_task, "clock_task", 4096, NULL, 5, &s_clock_task_handle);
+        xTaskCreate(nixie_clock_task, "clock_task", 2560, NULL, 5, &s_clock_task_handle);
 #elif CONFIG_BASE_CLOCK_TYPE_FIBONACCI
-        xTaskCreate(fibonacci_clock_task, "clock_task", 4096, NULL, 5, &s_clock_task_handle);
+        xTaskCreate(fibonacci_clock_task, "clock_task", 2560, NULL, 5, &s_clock_task_handle);
 #elif CONFIG_BASE_CLOCK_TYPE_WORDCLOCK
-        xTaskCreate(wordclock_clock_task, "clock_task", 4096, NULL, 5, &s_clock_task_handle);
+        xTaskCreate(wordclock_clock_task, "clock_task", 2560, NULL, 5, &s_clock_task_handle);
 #else
 #error "No base clock type selected"
 #endif
