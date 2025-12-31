@@ -13,12 +13,15 @@
 #include <esp_random.h>
 #include <time.h>
 #include <string.h>
-#include <internet_time.h>
+#include "kd_common.h"
+#include "clock_events.h"
 
 #include <esp_event.h>
 
 #include "sdkconfig.h"
 #include <api.h>
+
+static const char* TAG = "nixie";
 
 #ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
 
@@ -64,59 +67,111 @@ void nixie_show_time(int h, int m, int s) {
 }
 
 
-void nixie_clock_task(void* pvParameters) {
+// Shared state for the nixie clock task
+static volatile bool g_ntp_synced = false;
+static volatile bool g_cleaning = false;
+static volatile int g_cleaning_digit = 0;
+static volatile int g_cleaning_iteration = 0;
+
+// Update the display with current time
+static void update_display(void) {
+    if (!g_ntp_synced) return;
+
     time_t now;
     struct tm timeinfo;
-    int lastHour = -1;
-    int lastMinute = -1;
-    int lastSecond = -1;
-    int lastCleaningDigit = -1;
-    int cleaningIteration = 0;
-    bool cleaning = false;
+    time(&now);
+    localtime_r(&now, &timeinfo);
 
+    int hour = timeinfo.tm_hour;
+    if (!nixie_config.military_time) {
+        if (hour >= 12) {
+            hour -= 12;
+            if (hour == 0) hour = 12;
+        }
+    }
+
+    ESP_LOGD(TAG, "Updating display: %02d:%02d:%02d", hour, timeinfo.tm_min, timeinfo.tm_sec);
+    nixie_show_time(hour, timeinfo.tm_min, timeinfo.tm_sec);
+}
+
+// Event handler for clock events
+static void clock_event_handler(void* arg, esp_event_base_t base, int32_t id, void* data) {
+    if (base == CLOCK_EVENTS) {
+        switch (id) {
+            case CLOCK_EVENT_HOUR_TICK: {
+                // Check for cleaning trigger at 4:00 AM
+                clock_time_event_data_t* time_data = (clock_time_event_data_t*)data;
+                if (time_data && time_data->hour == 4 && time_data->minute == 0) {
+                    ESP_LOGI(TAG, "Starting cathode cleaning cycle");
+                    g_cleaning = true;
+                    g_cleaning_digit = 0;
+                    g_cleaning_iteration = 0;
+                }
+                break;
+            }
+            case CLOCK_EVENT_CONFIG_CHANGED:
+            case CLOCK_EVENT_FORCE_REFRESH:
+                // Force immediate display update
+                if (!g_cleaning) {
+                    update_display();
+                }
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+// Event handler for NTP sync
+static void ntp_event_handler(void* arg, esp_event_base_t base, int32_t id, void* data) {
+    if (id == KD_NTP_EVENT_SYNC_COMPLETE) {
+        ESP_LOGI(TAG, "NTP synced, loading display settings");
+        g_ntp_synced = true;
+        PixelDriver::getMainChannel()->loadFromNVS();
+        update_display();
+    }
+    else if (id == KD_NTP_EVENT_SYNC_LOST) {
+        g_ntp_synced = false;
+    }
+}
+
+void nixie_clock_task(void* pvParameters) {
+    ESP_LOGI(TAG, "Nixie clock task started");
+
+    // Show syncing animation
     PixelDriver::getMainChannel()->setColor(PixelColor(255, 255, 0)); // Yellow during sync
     PixelDriver::getMainChannel()->setEffectByID("CYCLIC");
     PixelDriver::getMainChannel()->setBrightness(255);
 
-    while (!is_time_synced()) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+    // Register for events
+    esp_event_handler_register(CLOCK_EVENTS, ESP_EVENT_ANY_ID, clock_event_handler, nullptr);
+    esp_event_handler_register(KD_NTP_EVENTS, ESP_EVENT_ANY_ID, ntp_event_handler, nullptr);
+
+    // If already synced, switch to display mode immediately
+    if (kd_common_ntp_is_synced()) {
+        g_ntp_synced = true;
+        PixelDriver::getMainChannel()->loadFromNVS();
     }
 
-    PixelDriver::getMainChannel()->loadFromNVS();
-
+    // Minimal polling loop - only needed for blinking dots (sub-second updates)
+    // Events handle time changes and config updates
     while (true) {
-        time(&now);
-        localtime_r(&now, &timeinfo);
-
-        if (!cleaning) {
-            if (timeinfo.tm_hour != lastHour || timeinfo.tm_min != lastMinute || timeinfo.tm_sec != lastSecond) {
-                lastHour = timeinfo.tm_hour;
-                lastMinute = timeinfo.tm_min;
-                lastSecond = timeinfo.tm_sec;
-
-                int hour = lastHour;
-
-                if (!nixie_config.military_time) {
-                    if (hour >= 12) {
-                        hour -= 12;
-                        if (hour == 0) hour = 12; // Handle midnight case
-                    }
+        if (g_ntp_synced) {
+            if (g_cleaning) {
+                // Cleaning mode - cycle through all digits
+                nixie_show_time(g_cleaning_digit * 11, g_cleaning_digit * 11, g_cleaning_digit * 11);
+                g_cleaning_digit = (g_cleaning_digit + 1) % 10;
+                g_cleaning_iteration++;
+                if (g_cleaning_iteration >= 3000) {  // ~10 minutes at 200ms
+                    ESP_LOGI(TAG, "Cathode cleaning complete");
+                    g_cleaning = false;
+                    g_cleaning_iteration = 0;
+                    update_display();
                 }
-
-                nixie_show_time(hour, lastMinute, lastSecond);
             }
-
-            if (lastHour == 4 && lastMinute == 0 && lastSecond == 0) { // Start cleaning at 4:00 AM local time
-                cleaning = true;
-            }
-        }
-        else {
-            nixie_show_time(lastCleaningDigit * 11, lastCleaningDigit * 11, lastCleaningDigit * 11);
-            lastCleaningDigit = (lastCleaningDigit + 1) % 10;
-            cleaningIteration++;
-            if (cleaningIteration >= 3000) { //Clean for about 10 minutes
-                cleaning = false;
-                cleaningIteration = 0;
+            else if (nixie_config.blinking_dots) {
+                // Update display for blinking dots effect (sub-second animation)
+                update_display();
             }
         }
 

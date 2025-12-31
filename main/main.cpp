@@ -15,9 +15,12 @@
 
 #include "kd_common.h"
 #include "cJSON.h"
-#include "internet_time.h"
 #include "api.h"
 #include "kd_pixdriver.h"
+#include "clock_time_ticker.h"
+
+// Task handle to prevent duplicate task creation
+static TaskHandle_t s_clock_task_handle = NULL;
 
 #ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
 #include "nixie/nixie.h"
@@ -52,16 +55,18 @@ void wifi_connected(void* arg, esp_event_base_t event_base, int32_t event_id, vo
     PixelDriver::getMainChannel()->setColor(PixelColor(255, 255, 0));
     PixelDriver::getMainChannel()->setEffectByID("CYCLIC");
 
+    // Only create clock task once (prevent duplicates on WiFi reconnect)
+    if (s_clock_task_handle == NULL) {
 #ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
-    xTaskCreate(nixie_clock_task, "clock_task", 4096, NULL, 5, NULL);
+        xTaskCreate(nixie_clock_task, "clock_task", 4096, NULL, 5, &s_clock_task_handle);
 #elif CONFIG_BASE_CLOCK_TYPE_FIBONACCI
-    xTaskCreate(fibonacci_clock_task, "clock_task", 4096, NULL, 5, NULL);
+        xTaskCreate(fibonacci_clock_task, "clock_task", 4096, NULL, 5, &s_clock_task_handle);
 #elif CONFIG_BASE_CLOCK_TYPE_WORDCLOCK
-    xTaskCreate(wordclock_clock_task, "clock_task", 4096, NULL, 5, NULL);
+        xTaskCreate(wordclock_clock_task, "clock_task", 4096, NULL, 5, &s_clock_task_handle);
 #else
 #error "No base clock type selected"
 #endif
-
+    }
 }
 
 extern "C" void app_main(void)
@@ -73,8 +78,10 @@ extern "C" void app_main(void)
     kd_common_set_provisioning_pop_token_format(ProvisioningPOPTokenFormat_t::NONE);
     kd_common_init();
 
+    // Initialize time ticker (posts CLOCK_EVENT_MINUTE_TICK and CLOCK_EVENT_HOUR_TICK)
+    clock_time_ticker_init();
+
     api_init();
-    time_init();
 
 #ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
     nixie_clock_init();

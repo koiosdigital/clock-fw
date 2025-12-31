@@ -10,9 +10,12 @@
 #include <esp_random.h>
 #include <time.h>
 #include <string.h>
-#include "internet_time.h"
+#include "kd_common.h"
+#include "clock_events.h"
 
 #include "sdkconfig.h"
+
+static const char* TAG = "wordclock";
 
 const char* letters =
 "ITLISOTWENTYRONETWOETENMTHIRTEENFIVEMELEVENIFOURTHREEPNINETEENSUFOURTEENMIDNIGHTSIXTEENDEIGHTEENSEVENTEENOTWELVEHALFELQUARTEROTOPASTRONESATW"
@@ -200,36 +203,62 @@ end:
     PixelDriver::getMainChannel()->setMask(std::vector<uint8_t>(bits, bits + 256));
 }
 
-void wordclock_clock_task(void* pvParameter) {
+// Update the display with current time
+static void update_display(void) {
     time_t now;
     struct tm timeinfo;
-    int lastHour = -1;
-    int lastMinute = -1;
+    time(&now);
+    localtime_r(&now, &timeinfo);
 
+    ESP_LOGD(TAG, "Updating display: %02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+    setTime(timeinfo.tm_hour, timeinfo.tm_min);
+}
+
+// Event handler for clock events
+static void clock_event_handler(void* arg, esp_event_base_t base, int32_t id, void* data) {
+    if (base == CLOCK_EVENTS) {
+        switch (id) {
+            case CLOCK_EVENT_MINUTE_TICK:
+            case CLOCK_EVENT_CONFIG_CHANGED:
+            case CLOCK_EVENT_FORCE_REFRESH:
+                update_display();
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+// Event handler for NTP sync
+static void ntp_event_handler(void* arg, esp_event_base_t base, int32_t id, void* data) {
+    if (id == KD_NTP_EVENT_SYNC_COMPLETE) {
+        ESP_LOGI(TAG, "NTP synced, loading display settings");
+        PixelDriver::getMainChannel()->loadFromNVS();
+        update_display();
+    }
+}
+
+void wordclock_clock_task(void* pvParameter) {
+    ESP_LOGI(TAG, "Wordclock task started");
+
+    // Show syncing animation
     PixelDriver::getMainChannel()->setColor(PixelColor(255, 255, 0)); // Yellow during sync
     PixelDriver::getMainChannel()->setEffectByID("CYCLIC");
 
-    // Wait for time sync while LED shows cyclic yellow (set by wifi_connected handler)
-    while (!is_time_synced()) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+    // Register for clock events
+    esp_event_handler_register(CLOCK_EVENTS, ESP_EVENT_ANY_ID, clock_event_handler, nullptr);
+    esp_event_handler_register(KD_NTP_EVENTS, KD_NTP_EVENT_SYNC_COMPLETE, ntp_event_handler, nullptr);
+
+    // If already synced, switch to display mode immediately
+    if (kd_common_ntp_is_synced()) {
+        ESP_LOGI(TAG, "Already synced, starting display");
+        PixelDriver::getMainChannel()->loadFromNVS();
+        update_display();
     }
 
-    PixelDriver::getMainChannel()->loadFromNVS();
-
+    // Task sleeps indefinitely - all updates come from events
     while (true) {
-        time(&now);
-        localtime_r(&now, &timeinfo);
-
-        if (timeinfo.tm_hour != lastHour || timeinfo.tm_min != lastMinute) {
-            lastHour = timeinfo.tm_hour;
-            lastMinute = timeinfo.tm_min;
-
-            // Set the pixels based on the current time
-            setTime(lastHour, lastMinute);
-        }
-
-        // Simulate a delay for the clock update
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(portMAX_DELAY);
     }
 }
 

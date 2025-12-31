@@ -13,10 +13,13 @@
 #include <cstring>
 #include "themes.h"
 
-#include <internet_time.h>
+#include "kd_common.h"
+#include "clock_events.h"
 
 #include "sdkconfig.h"
 #include <api.h>
+
+static const char* TAG = "fibonacci";
 
 #ifdef CONFIG_BASE_CLOCK_TYPE_FIBONACCI
 
@@ -319,40 +322,68 @@ void setTime(uint8_t hours, uint8_t minutes)
     }
 }
 
-bool forceUpdate = false;
-void fibonacci_clock_task(void* pvParameters) {
+// Update the display with current time
+static void update_display(void) {
     time_t now;
     struct tm timeinfo;
-    int lastHour = -1;
-    int lastMinute = -1;
+    time(&now);
+    localtime_r(&now, &timeinfo);
 
+    ESP_LOGD(TAG, "Updating display: %02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+    setTime(timeinfo.tm_hour % 12, timeinfo.tm_min);
+}
+
+// Event handler for clock events
+static void clock_event_handler(void* arg, esp_event_base_t base, int32_t id, void* data) {
+    if (base == CLOCK_EVENTS) {
+        switch (id) {
+            case CLOCK_EVENT_MINUTE_TICK:
+            case CLOCK_EVENT_CONFIG_CHANGED:
+            case CLOCK_EVENT_FORCE_REFRESH:
+                update_display();
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+// Event handler for NTP sync
+static void ntp_event_handler(void* arg, esp_event_base_t base, int32_t id, void* data) {
+    if (id == KD_NTP_EVENT_SYNC_COMPLETE) {
+        ESP_LOGI(TAG, "NTP synced, switching to raw display mode");
+        PixelDriver::getMainChannel()->setEffectByID("raw");
+        update_display();
+    }
+}
+
+void fibonacci_clock_task(void* pvParameters) {
+    ESP_LOGI(TAG, "Fibonacci clock task started");
+
+    // Show syncing animation
     PixelDriver::getMainChannel()->setColor(PixelColor(255, 255, 0)); // Yellow during sync
     PixelDriver::getMainChannel()->setEffectByID("CYCLIC");
-    PixelDriver::getMainChannel()->setBrightness(255);
+    PixelDriver::getMainChannel()->setBrightness(fib_config.brightness);
 
-    while (!is_time_synced()) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+    // Register for clock events
+    esp_event_handler_register(CLOCK_EVENTS, ESP_EVENT_ANY_ID, clock_event_handler, nullptr);
+    esp_event_handler_register(KD_NTP_EVENTS, KD_NTP_EVENT_SYNC_COMPLETE, ntp_event_handler, nullptr);
+
+    // If already synced, switch to display mode immediately
+    if (kd_common_ntp_is_synced()) {
+        PixelDriver::getMainChannel()->setEffectByID("raw");
+        update_display();
     }
 
-    PixelDriver::getMainChannel()->setEffectByID("raw");
-
+    // Task sleeps indefinitely - all updates come from events
     while (true) {
-        time(&now);
-        localtime_r(&now, &timeinfo);
-
-        if (timeinfo.tm_hour != lastHour || timeinfo.tm_min != lastMinute || forceUpdate) {
-            lastHour = timeinfo.tm_hour;
-            lastMinute = timeinfo.tm_min;
-            forceUpdate = false; // Reset force update flag after processing
-
-            // Set the pixels based on the current time
-            setTime(lastHour % 12, lastMinute);
-        }
-
-
-        // Simulate a delay for the clock update
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(portMAX_DELAY);
     }
+}
+
+// Post config changed event to trigger display update
+static void post_config_changed(void) {
+    esp_event_post(CLOCK_EVENTS, CLOCK_EVENT_CONFIG_CHANGED, nullptr, 0, 0);
 }
 
 // Fibonacci configuration functions
@@ -360,7 +391,7 @@ void fibonacci_set_brightness(uint8_t brightness) {
     fib_config.brightness = brightness;
     PixelDriver::getMainChannel()->setBrightness(brightness);
     fibonacci_save_to_nvs(&fib_config);
-    forceUpdate = true; // Force update the display
+    post_config_changed();
 }
 
 void fibonacci_set_theme(uint8_t theme_id) {
@@ -368,13 +399,13 @@ void fibonacci_set_theme(uint8_t theme_id) {
         fib_config.theme_id = theme_id;
         fibonacci_save_to_nvs(&fib_config);
     }
-    forceUpdate = true; // Force update the display
+    post_config_changed();
 }
 
 void fibonacci_set_on_state(bool on) {
     fib_config.on = on;
     fibonacci_save_to_nvs(&fib_config);
-    forceUpdate = true; // Force update the display
+    post_config_changed();
 }
 
 void fibonacci_apply_config(fibonacci_config_t* config) {

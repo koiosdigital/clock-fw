@@ -1,6 +1,7 @@
 #include "nixie_handlers.h"
 #include "nixie.h"
 #include "nixie_oe.h"
+#include "clock_events.h"
 #include "cJSON.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -137,6 +138,9 @@ void nixie_set_config(const nixie_config_t* config) {
     nixie_config = *config;
     nixie_apply_config(config);
     nixie_save_to_nvs(config);
+
+    // Post config changed event to trigger display update
+    esp_event_post(CLOCK_EVENTS, CLOCK_EVENT_CONFIG_CHANGED, nullptr, 0, 0);
 }
 
 void nixie_apply_config(const nixie_config_t* config) {

@@ -13,13 +13,17 @@ ENDIF()
 IF(DEFINED ENV{BUILD_VARIANT})
     set(BUILD_VARIANT $ENV{BUILD_VARIANT})
 ELSE()
-    set(BUILD_VARIANT "wordclock_dev")
+    set(BUILD_VARIANT "nixie")
 ENDIF()
 
 message("Building version ${PROJECT_VER} for variant ${BUILD_VARIANT}")
 add_compile_definitions(FIRMWARE_VARIANT="${BUILD_VARIANT}")
 add_compile_definitions(ENABLE_OTA) #comment this line to disable OTA updates
 #End KD-Common OTA
+
+# Disable optional kd_common features (must be before project() to propagate)
+set(KD_COMMON_CRYPTO_DISABLE TRUE CACHE BOOL "Disable kd_common crypto features" FORCE)
+set(KD_COMMON_CONSOLE_DISABLE TRUE CACHE BOOL "Disable kd_common console features" FORCE)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 

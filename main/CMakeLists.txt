@@ -3,7 +3,6 @@ file(GLOB_RECURSE NESTED_SRC
 )
 
 list(APPEND INCLUDE_DIRS ".")
-list(APPEND INCLUDE_DIRS "internet_time")
 list(APPEND INCLUDE_DIRS "api")
 list(APPEND INCLUDE_DIRS "wordclock")
 list(APPEND INCLUDE_DIRS "nixie")
@@ -23,4 +22,3 @@ idf_build_set_property(COMPILE_OPTIONS "-Wno-write-strings" APPEND)
 
 idf_build_set_property(COMPILE_OPTIONS "-DDEVICE_NAME_PREFIX=\"CLOCK\"" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-DKD_COMMON_CRYPTO_DISABLE" APPEND)
-idf_build_set_property(COMPILE_OPTIONS "-DKD_COMMON_CONSOLE_DISABLE" APPEND)

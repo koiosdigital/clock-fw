@@ -12,7 +12,7 @@
 	url = https://github.com/koiosdigital/kd_common
 [submodule "components/protobufs"]
 	path = components/protobufs
-	url = https://github.com/levitree/protobufs
+	url = https://github.com/koiosdigital/protobufs
 [submodule "components/kd_pixdriver"]
 	path = components/kd_pixdriver
 	url = https://github.com/koiosdigital/kd_pixdriver

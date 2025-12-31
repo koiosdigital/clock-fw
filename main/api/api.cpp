@@ -3,9 +3,8 @@
 #include "mdns.h"
 #include "esp_http_server.h"
 #include "kd_common.h"
+#include "clock_events.h"
 #include "cJSON.h"
-#include "internet_time.h"
-#include "embedded_tz_db.h"
 #include <esp_app_desc.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -101,31 +100,24 @@ esp_err_t about_handler(httpd_req_t* req) {
 }
 
 esp_err_t system_config_get_handler(httpd_req_t* req) {
-    time_config_t config = time_get_config();
-    char* wifi_hostname = kd_common_get_wifi_hostname();
+    // Note: kd_common_get_wifi_hostname() returns a static buffer, do NOT free it
+    const char* wifi_hostname = kd_common_get_wifi_hostname();
 
     // Create JSON response
     cJSON* json = cJSON_CreateObject();
     if (json == NULL) {
-        if (wifi_hostname) free(wifi_hostname);
         httpd_resp_send_500(req);
         return ESP_FAIL;
     }
 
-    cJSON* auto_timezone = cJSON_CreateBool(config.auto_timezone);
-    cJSON* timezone = cJSON_CreateString(config.timezone);
-    cJSON* ntp_server = cJSON_CreateString(config.ntp_server);
-    cJSON* wifi_hostname_json = cJSON_CreateString(wifi_hostname ? wifi_hostname : "");
-
-    cJSON_AddItemToObject(json, "auto_timezone", auto_timezone);
-    cJSON_AddItemToObject(json, "timezone", timezone);
-    cJSON_AddItemToObject(json, "ntp_server", ntp_server);
-    cJSON_AddItemToObject(json, "wifi_hostname", wifi_hostname_json);
+    cJSON_AddBoolToObject(json, "auto_timezone", kd_common_get_auto_timezone());
+    cJSON_AddStringToObject(json, "timezone", kd_common_get_timezone());
+    cJSON_AddStringToObject(json, "ntp_server", kd_common_get_ntp_server());
+    cJSON_AddStringToObject(json, "wifi_hostname", wifi_hostname ? wifi_hostname : "");
 
     char* json_string = cJSON_Print(json);
     if (json_string == NULL) {
         cJSON_Delete(json);
-        if (wifi_hostname) free(wifi_hostname);
         httpd_resp_send_500(req);
         return ESP_FAIL;
     }
@@ -160,57 +152,48 @@ esp_err_t system_config_post_handler(httpd_req_t* req) {
         return ESP_FAIL;
     }
 
-    // Get current config as starting point
-    time_config_t new_config = time_get_config();
-
     // Validate and extract fields
     cJSON* auto_timezone_json = cJSON_GetObjectItem(json, "auto_timezone");
     cJSON* timezone_json = cJSON_GetObjectItem(json, "timezone");
     cJSON* ntp_server_json = cJSON_GetObjectItem(json, "ntp_server");
     cJSON* wifi_hostname_json = cJSON_GetObjectItem(json, "wifi_hostname");
 
-    // Validate auto_timezone if present
+    // Apply each setting individually using kd_common functions
     if (cJSON_IsBool(auto_timezone_json)) {
-        new_config.auto_timezone = cJSON_IsTrue(auto_timezone_json);
+        kd_common_set_auto_timezone(cJSON_IsTrue(auto_timezone_json));
     }
 
-    // Validate timezone if present
     if (cJSON_IsString(timezone_json)) {
         const char* tz_str = cJSON_GetStringValue(timezone_json);
-        if (strlen(tz_str) < sizeof(new_config.timezone)) {
-            strncpy(new_config.timezone, tz_str, sizeof(new_config.timezone) - 1);
-            new_config.timezone[sizeof(new_config.timezone) - 1] = '\0';
+        if (tz_str && strlen(tz_str) < 64) {
+            kd_common_set_timezone(tz_str);
         }
     }
 
-    // Validate ntp_server if present
     if (cJSON_IsString(ntp_server_json)) {
         const char* ntp_str = cJSON_GetStringValue(ntp_server_json);
-        if (strlen(ntp_str) < sizeof(new_config.ntp_server)) {
-            strncpy(new_config.ntp_server, ntp_str, sizeof(new_config.ntp_server) - 1);
-            new_config.ntp_server[sizeof(new_config.ntp_server) - 1] = '\0';
+        if (ntp_str && strlen(ntp_str) < 64) {
+            kd_common_set_ntp_server(ntp_str);
         }
     }
 
-    // Validate wifi_hostname if present
-    bool wifi_hostname_updated = false;
     if (cJSON_IsString(wifi_hostname_json)) {
         const char* hostname_str = cJSON_GetStringValue(wifi_hostname_json);
         if (hostname_str && strlen(hostname_str) > 0 && strlen(hostname_str) <= 63) {
             kd_common_set_wifi_hostname(hostname_str);
-            wifi_hostname_updated = true;
         }
     }
 
     cJSON_Delete(json);
 
-    // Apply configuration
-    time_set_config(&new_config);
+    // Post config changed event if timezone was updated (may affect clock display)
+    if (timezone_json || auto_timezone_json) {
+        esp_event_post(CLOCK_EVENTS, CLOCK_EVENT_CONFIG_CHANGED, nullptr, 0, 0);
+    }
 
-    // Create dynamic response message
+    // Create success response
     cJSON* response_json = cJSON_CreateObject();
-    cJSON* status = cJSON_CreateString("success");
-    cJSON_AddItemToObject(response_json, "status", status);
+    cJSON_AddStringToObject(response_json, "status", "success");
 
     char* response_string = cJSON_Print(response_json);
     if (response_string == NULL) {
@@ -229,7 +212,8 @@ esp_err_t system_config_post_handler(httpd_req_t* req) {
 }
 
 esp_err_t time_zones_handler(httpd_req_t* req) {
-    const embeddedTz_t* zones = tz_db_get_all_zones();
+    const kd_common_tz_entry_t* zones = kd_common_get_all_timezones();
+    int num_zones = kd_common_get_timezone_count();
 
     // Set content type and start chunked response
     httpd_resp_set_type(req, "application/json");
@@ -242,10 +226,10 @@ esp_err_t time_zones_handler(httpd_req_t* req) {
     const int CHUNK_SIZE = 20;  // Process 20 zones at a time
     bool first_zone = true;
 
-    for (int chunk_start = 0; chunk_start < TZ_DB_NUM_ZONES; chunk_start += CHUNK_SIZE) {
+    for (int chunk_start = 0; chunk_start < num_zones; chunk_start += CHUNK_SIZE) {
         int chunk_end = chunk_start + CHUNK_SIZE;
-        if (chunk_end > TZ_DB_NUM_ZONES) {
-            chunk_end = TZ_DB_NUM_ZONES;
+        if (chunk_end > num_zones) {
+            chunk_end = num_zones;
         }
 
         // Create JSON array for this chunk
@@ -260,11 +244,8 @@ esp_err_t time_zones_handler(httpd_req_t* req) {
             cJSON* zone_obj = cJSON_CreateObject();
             if (zone_obj == NULL) continue;
 
-            cJSON* name = cJSON_CreateString(zones[i].name);
-            cJSON* rule = cJSON_CreateString(zones[i].rule);
-
-            cJSON_AddItemToObject(zone_obj, "name", name);
-            cJSON_AddItemToObject(zone_obj, "rule", rule);
+            cJSON_AddStringToObject(zone_obj, "name", zones[i].name);
+            cJSON_AddStringToObject(zone_obj, "rule", zones[i].rule);
             cJSON_AddItemToArray(chunk_array, zone_obj);
         }
 

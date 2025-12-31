@@ -12,5 +12,5 @@ jobs:
     uses: acvigue/.github/.github/workflows/idf_build.yaml@main
     with:
       idf_version: v5.5.1
-      project_name: KD Clock
+      project_name: clock-fw
       create_release: true
