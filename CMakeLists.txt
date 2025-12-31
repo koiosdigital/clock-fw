@@ -23,7 +23,6 @@ add_compile_definitions(ENABLE_OTA) #comment this line to disable OTA updates
 
 # Disable optional kd_common features (must be before project() to propagate)
 set(KD_COMMON_CRYPTO_DISABLE TRUE CACHE BOOL "Disable kd_common crypto features" FORCE)
-set(KD_COMMON_CONSOLE_DISABLE TRUE CACHE BOOL "Disable kd_common console features" FORCE)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
