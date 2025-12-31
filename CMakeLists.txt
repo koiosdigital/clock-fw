@@ -14,7 +14,7 @@ ENDIF()
 IF(DEFINED ENV{BUILD_VARIANT})
     set(BUILD_VARIANT $ENV{BUILD_VARIANT})
 ELSE()
-    set(BUILD_VARIANT "nixie")
+    set(BUILD_VARIANT "dev")
 ENDIF()
 
 message("Building version ${PROJECT_VER} for variant ${BUILD_VARIANT}")
