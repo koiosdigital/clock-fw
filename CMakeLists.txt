@@ -2,6 +2,7 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.16)
 
+
 #KD-Common OTA
 IF(DEFINED ENV{BUILD_VERSION})
 set(PROJECT_VER $ENV{BUILD_VERSION})
