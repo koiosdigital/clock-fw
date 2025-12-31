@@ -19,7 +19,6 @@
 #include "kd_pixdriver.h"
 #include "clock_time_ticker.h"
 
-// Task handle to prevent duplicate task creation
 static TaskHandle_t s_clock_task_handle = NULL;
 
 #ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
