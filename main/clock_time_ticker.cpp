@@ -13,6 +13,7 @@ namespace {
 
 esp_timer_handle_t g_ticker_timer = nullptr;
 bool g_running = false;
+int g_last_second = -1;
 int g_last_minute = -1;
 int g_last_hour = -1;
 
@@ -32,25 +33,34 @@ void ticker_callback(void* arg) {
         .second = timeinfo.tm_sec
     };
 
-    // Check for minute change
-    if (timeinfo.tm_min != g_last_minute) {
-        g_last_minute = timeinfo.tm_min;
+    // Check for second change
+    if (timeinfo.tm_sec != g_last_second) {
+        g_last_second = timeinfo.tm_sec;
 
-        // Post minute tick event
-        esp_event_post(CLOCK_EVENTS, CLOCK_EVENT_MINUTE_TICK,
+        // Post second tick event
+        esp_event_post(CLOCK_EVENTS, CLOCK_EVENT_SECOND_TICK,
                        &event_data, sizeof(event_data), 0);
 
-        ESP_LOGD(TAG, "Minute tick: %02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+        // Check for minute change
+        if (timeinfo.tm_min != g_last_minute) {
+            g_last_minute = timeinfo.tm_min;
 
-        // Check for hour change
-        if (timeinfo.tm_hour != g_last_hour) {
-            g_last_hour = timeinfo.tm_hour;
-
-            // Post hour tick event
-            esp_event_post(CLOCK_EVENTS, CLOCK_EVENT_HOUR_TICK,
+            // Post minute tick event
+            esp_event_post(CLOCK_EVENTS, CLOCK_EVENT_MINUTE_TICK,
                            &event_data, sizeof(event_data), 0);
 
-            ESP_LOGI(TAG, "Hour tick: %02d:00", timeinfo.tm_hour);
+            ESP_LOGD(TAG, "Minute tick: %02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+
+            // Check for hour change
+            if (timeinfo.tm_hour != g_last_hour) {
+                g_last_hour = timeinfo.tm_hour;
+
+                // Post hour tick event
+                esp_event_post(CLOCK_EVENTS, CLOCK_EVENT_HOUR_TICK,
+                               &event_data, sizeof(event_data), 0);
+
+                ESP_LOGI(TAG, "Hour tick: %02d:00", timeinfo.tm_hour);
+            }
         }
     }
 }
@@ -138,6 +148,7 @@ void clock_time_ticker_start() {
     }
 
     // Reset tracking
+    g_last_second = -1;
     g_last_minute = -1;
     g_last_hour = -1;
 

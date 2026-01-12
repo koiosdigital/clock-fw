@@ -98,6 +98,12 @@ static void update_display(void) {
 static void clock_event_handler(void* arg, esp_event_base_t base, int32_t id, void* data) {
     if (base == CLOCK_EVENTS) {
         switch (id) {
+            case CLOCK_EVENT_SECOND_TICK:
+                // Update display every second
+                if (!g_cleaning) {
+                    update_display();
+                }
+                break;
             case CLOCK_EVENT_HOUR_TICK: {
                 // Check for cleaning trigger at 4:00 AM
                 clock_time_event_data_t* time_data = (clock_time_event_data_t*)data;
@@ -153,24 +159,18 @@ void nixie_clock_task(void* pvParameters) {
         PixelDriver::getMainChannel()->loadFromNVS();
     }
 
-    // Minimal polling loop - only needed for blinking dots (sub-second updates)
-    // Events handle time changes and config updates
+    // Polling loop only needed for cleaning cycle animation
+    // Normal time updates are handled by CLOCK_EVENT_SECOND_TICK
     while (true) {
-        if (g_ntp_synced) {
-            if (g_cleaning) {
-                // Cleaning mode - cycle through all digits
-                nixie_show_time(g_cleaning_digit * 11, g_cleaning_digit * 11, g_cleaning_digit * 11);
-                g_cleaning_digit = (g_cleaning_digit + 1) % 10;
-                g_cleaning_iteration++;
-                if (g_cleaning_iteration >= 3000) {  // ~10 minutes at 200ms
-                    ESP_LOGI(TAG, "Cathode cleaning complete");
-                    g_cleaning = false;
-                    g_cleaning_iteration = 0;
-                    update_display();
-                }
-            }
-            else if (nixie_config.blinking_dots) {
-                // Update display for blinking dots effect (sub-second animation)
+        if (g_ntp_synced && g_cleaning) {
+            // Cleaning mode - cycle through all digits
+            nixie_show_time(g_cleaning_digit * 11, g_cleaning_digit * 11, g_cleaning_digit * 11);
+            g_cleaning_digit = (g_cleaning_digit + 1) % 10;
+            g_cleaning_iteration++;
+            if (g_cleaning_iteration >= 3000) {  // ~10 minutes at 200ms
+                ESP_LOGI(TAG, "Cathode cleaning complete");
+                g_cleaning = false;
+                g_cleaning_iteration = 0;
                 update_display();
             }
         }

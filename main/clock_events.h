@@ -9,6 +9,7 @@ extern "C" {
 ESP_EVENT_DECLARE_BASE(CLOCK_EVENTS);
 
 typedef enum {
+    CLOCK_EVENT_SECOND_TICK,        // Posted every second change
     CLOCK_EVENT_MINUTE_TICK,        // Posted every minute change
     CLOCK_EVENT_HOUR_TICK,          // Posted every hour change
     CLOCK_EVENT_CONFIG_CHANGED,     // Posted when clock config changes
