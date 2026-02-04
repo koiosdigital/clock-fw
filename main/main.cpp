@@ -6,12 +6,8 @@
 
 #include "esp_log.h"
 #include "sdkconfig.h"
-#include "esp_http_client.h"
-#include "esp_crt_bundle.h"
 #include "esp_event.h"
 #include <esp_wifi.h>
-#include "wifi_provisioning/manager.h"
-#include "protocomm_ble.h"
 
 #include "kd_common.h"
 #include "cJSON.h"
@@ -74,13 +70,13 @@ extern "C" void app_main(void)
     esp_event_loop_create_default();
 
     //use protocomm security version 0
-    kd_common_set_provisioning_pop_token_format(ProvisioningPOPTokenFormat_t::NONE);
+    kd_common_set_provisioning_srp_password_format(ProvisioningSRPPasswordFormat_t::PROVISIONING_SRP_FORMAT_STATIC);
     kd_common_init();
 
     // Initialize time ticker (posts CLOCK_EVENT_MINUTE_TICK and CLOCK_EVENT_HOUR_TICK)
     clock_time_ticker_init();
 
-    api_init();
+    clock_api_init();
 
 #ifdef CONFIG_BASE_CLOCK_TYPE_NIXIE
     nixie_clock_init();
@@ -92,8 +88,6 @@ extern "C" void app_main(void)
 #error "No base clock type selected"
 #endif
 
-    esp_event_handler_register(PROTOCOMM_TRANSPORT_BLE_EVENT, PROTOCOMM_TRANSPORT_BLE_CONNECTED, &wifi_prov_connected, NULL);
-    esp_event_handler_register(WIFI_PROV_EVENT, WIFI_PROV_START, &wifi_prov_started, NULL);
     esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &wifi_disconnected, NULL);
     esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_connected, NULL);
 }

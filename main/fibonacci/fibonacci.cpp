@@ -17,11 +17,10 @@
 #include "clock_events.h"
 
 #include "sdkconfig.h"
-#include <api.h>
-
-static const char* TAG = "fibonacci";
 
 #ifdef CONFIG_BASE_CLOCK_TYPE_FIBONACCI
+
+static const char* TAG = "fibonacci";
 
 std::vector<PixelColor>* pixel_buffer = nullptr;
 uint8_t bits[9] = { 0 };
@@ -429,10 +428,8 @@ const fibonacci_colorTheme* fibonacci_get_theme_info(uint8_t theme_id) {
 
 
 void fibonacci_clock_init() {
-    httpd_handle_t server = get_httpd_handle();
-    if (server) {
-        register_fibonacci_handlers(server);
-    }
+    // Register fibonacci API handlers (called when httpd starts on WiFi connect)
+    kd_common_api_register_handlers(register_fibonacci_handlers);
 
     PixelDriver::initialize(60);
     PixelDriver::setCurrentLimit(1000); // 2000mA limit for Fibonacci LEDs

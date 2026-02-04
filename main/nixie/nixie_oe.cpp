@@ -50,9 +50,6 @@ void nixie_set_brightness(uint8_t brightness_percent) {
     if (brightness_percent > 100) {
         brightness_percent = 100;
     }
-    else if (brightness_percent < 0) {
-        brightness_percent = 0;
-    }
 
     // Map 0-100% to 20-100% duty cycle, then invert (since OE is active low)
     float actual_duty = 20.0f + (brightness_percent * 80.0f / 100.0f);

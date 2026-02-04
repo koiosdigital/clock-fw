@@ -19,7 +19,6 @@
 #include <esp_event.h>
 
 #include "sdkconfig.h"
-#include <api.h>
 
 static const char* TAG = "nixie";
 
@@ -71,7 +70,7 @@ void nixie_show_time(int h, int m, int s) {
 static volatile bool g_ntp_synced = false;
 static volatile bool g_cleaning = false;
 static volatile int g_cleaning_digit = 0;
-static volatile int g_cleaning_iteration = 0;
+static int g_cleaning_iteration = 0;
 
 // Update the display with current time
 static void update_display(void) {
@@ -98,32 +97,32 @@ static void update_display(void) {
 static void clock_event_handler(void* arg, esp_event_base_t base, int32_t id, void* data) {
     if (base == CLOCK_EVENTS) {
         switch (id) {
-            case CLOCK_EVENT_SECOND_TICK:
-                // Update display every second
-                if (!g_cleaning) {
-                    update_display();
-                }
-                break;
-            case CLOCK_EVENT_HOUR_TICK: {
-                // Check for cleaning trigger at 4:00 AM
-                clock_time_event_data_t* time_data = (clock_time_event_data_t*)data;
-                if (time_data && time_data->hour == 4 && time_data->minute == 0) {
-                    ESP_LOGI(TAG, "Starting cathode cleaning cycle");
-                    g_cleaning = true;
-                    g_cleaning_digit = 0;
-                    g_cleaning_iteration = 0;
-                }
-                break;
+        case CLOCK_EVENT_SECOND_TICK:
+            // Update display every second
+            if (!g_cleaning) {
+                update_display();
             }
-            case CLOCK_EVENT_CONFIG_CHANGED:
-            case CLOCK_EVENT_FORCE_REFRESH:
-                // Force immediate display update
-                if (!g_cleaning) {
-                    update_display();
-                }
-                break;
-            default:
-                break;
+            break;
+        case CLOCK_EVENT_HOUR_TICK: {
+            // Check for cleaning trigger at 4:00 AM
+            clock_time_event_data_t* time_data = (clock_time_event_data_t*)data;
+            if (time_data && time_data->hour == 4 && time_data->minute == 0) {
+                ESP_LOGI(TAG, "Starting cathode cleaning cycle");
+                g_cleaning = true;
+                g_cleaning_digit = 0;
+                g_cleaning_iteration = 0;
+            }
+            break;
+        }
+        case CLOCK_EVENT_CONFIG_CHANGED:
+        case CLOCK_EVENT_FORCE_REFRESH:
+            // Force immediate display update
+            if (!g_cleaning) {
+                update_display();
+            }
+            break;
+        default:
+            break;
         }
     }
 }
@@ -180,13 +179,18 @@ void nixie_clock_task(void* pvParameters) {
 }
 
 void nixie_clock_init() {
-    httpd_handle_t server = get_httpd_handle();
-    if (server) {
-        register_nixie_handlers(server);
-    }
+    // Register nixie API handlers (called when httpd starts on WiFi connect)
+    kd_common_api_register_handlers(register_nixie_handlers);
 
     PixelDriver::initialize(60);
-    PixelDriver::addChannel(ChannelConfig((gpio_num_t)CONFIG_NIXIE_LED_DATA_PIN, CONFIG_NIXIE_LED_COUNT, CONFIG_NIXIE_LED_IS_RGBW ? PixelFormat::RGBW : PixelFormat::RGB, "Backlight"));
+
+#ifdef CONFIG_NIXIE_LED_IS_RGBW
+    PixelFormat pixel_format = PixelFormat::RGBW;
+#else
+    PixelFormat pixel_format = PixelFormat::RGB;
+#endif
+
+    PixelDriver::addChannel(ChannelConfig((gpio_num_t)CONFIG_NIXIE_LED_DATA_PIN, CONFIG_NIXIE_LED_COUNT, pixel_format, "Backlight"));
     PixelDriver::setCurrentLimit(600); // 600mA limit for Nixie LEDs
     PixelDriver::start();
 
@@ -202,7 +206,7 @@ void nixie_clock_init() {
     // Apply loaded configuration
     nixie_apply_config(&nixie_config);
 
-    nixie_show_time(99, 99, 99);
+    nixie_show_time(12, 12, 12);
 }
 
 void nixie_apply_config(nixie_config_t* config) {
