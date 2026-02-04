@@ -13,4 +13,4 @@ jobs:
     with:
       idf_version: v6.0-beta2
       project_name: clock-fw
-      create_release: false
+      create_release: true
