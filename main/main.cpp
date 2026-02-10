@@ -69,8 +69,6 @@ extern "C" void app_main(void)
     //event loop
     esp_event_loop_create_default();
 
-    //use protocomm security version 0
-    kd_common_set_provisioning_srp_password_format(ProvisioningSRPPasswordFormat_t::PROVISIONING_SRP_FORMAT_STATIC);
     kd_common_init();
 
     // Initialize time ticker (posts CLOCK_EVENT_MINUTE_TICK and CLOCK_EVENT_HOUR_TICK)
